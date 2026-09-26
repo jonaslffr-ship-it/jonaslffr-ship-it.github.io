@@ -419,7 +419,7 @@ footer p{max-width:860px}
   </div>
 
   <h2>Tools</h2>
-  <p class="sub" style="margin-bottom:16px">Seven instruments I built to think with — one on today’s real SPX options data, six as experiments with a known truth. All math is my own implementation, tested against finite differences or known answers, and runs in your browser.</p>
+  <p class="sub" style="margin-bottom:16px">Eight instruments I built to think with — two on today’s real market data, six as experiments with a known truth. All math is my own implementation, tested against finite differences or known answers, and runs in your browser.</p>
   <div class="tools-grid" id="toolGrid"></div>
 
   <h2>Research log</h2>
@@ -528,6 +528,77 @@ footer p{max-width:860px}
     </details>
 
     <div class="callout" style="margin-top:18px"><p><b>What this is:</b> Cboe’s delayed quotes (about 15 minutes), rebuilt every 30 minutes in trading hours. Implied vols are my own Black-76 inversions of mid quotes on the parity forward; time runs in calendar minutes as in the VIX, so a Monday expiry seen on Friday includes the weekend. Open interest is the prior day’s (OCC). <b>What it is not:</b> a trading signal — the dealer-gamma panels depend on an unverifiable sign assumption.</p></div>
+  </div>
+</section>
+
+<!-- =============================== IMPLIED RANGE =============================== -->
+<section class="view" id="v-range" role="tabpanel" aria-label="Implied range" hidden>
+  <div class="v-head">
+    <p class="eyebrow">Tool · live · ES &amp; NQ</p>
+    <h1>Implied range</h1>
+    <p class="sub">How far the options market expects ES and NQ to move: EM = price × IV ÷ √252 (IV ÷ 16), laid out as a σ-ladder from 0.25σ to 2σ — anchored at the futures’ fair value, the prior close or your own price. Below: five years of data on how often those levels actually held.</p>
+    <div class="btns" style="margin-top:14px"><span class="status" id="rgStatus"><i></i>loading…</span><span class="fn" id="rgAsof"></span></div>
+  </div>
+  <div id="rgEmpty" class="callout warn" hidden><p><b>Live data could not be loaded.</b> This tool needs <code>data/live/latest.js</code>.</p></div>
+  <div id="rgBody">
+  <div class="tool">
+    <aside class="panel" aria-label="Implied range controls">
+      <div><p class="group-t">Contract</p><div class="group">
+        <div class="row"><div class="seg" id="rgC" role="group" aria-label="Contract"><button type="button" data-v="ES" aria-pressed="true">ES · S&amp;P 500</button><button type="button" data-v="NQ">NQ · Nasdaq-100</button></div></div>
+        <div class="row flex"><span class="fn" id="rgCode">–</span><span class="val" id="rgBasis"></span></div>
+      </div></div>
+      <div><p class="group-t">Volatility</p><div class="group">
+        <div class="row"><div class="seg" id="rgV" role="group" aria-label="Volatility input"></div><p class="hint" id="rgVHint"></p></div>
+      </div></div>
+      <div><p class="group-t">Horizon</p><div class="group">
+        <div class="row"><div class="seg" id="rgH" role="group" aria-label="Horizon"><button type="button" data-v="1" aria-pressed="true">Day</button><button type="button" data-v="5">Week</button><button type="button" data-v="21">Month</button></div></div>
+      </div></div>
+      <div><p class="group-t">Anchor</p><div class="group">
+        <div class="row"><div class="seg" id="rgA" role="group" aria-label="Anchor"><button type="button" data-v="fair" aria-pressed="true">Fair value</button><button type="button" data-v="prev">Prior close</button><button type="button" data-v="custom">Custom</button></div></div>
+        <div class="row" id="rgCustomRow" hidden><label class="fn" for="rgCustom" style="display:block;margin-bottom:6px">Your price (e.g. your broker’s live quote)</label><input id="rgCustom" type="number" step="0.25" inputmode="decimal"></div>
+      </div><p class="tiny" style="margin:8px 14px 0">Fair value = index + basis. The basis is the option-implied forward at the futures expiry (put–call parity), so it tracks the futures price; it lags only by Cboe’s ~15-minute delay.</p></div>
+    </aside>
+    <div class="stack">
+      <div class="stats" aria-live="polite">
+        <div class="stat"><div class="l">Anchor</div><div class="v" id="rgAnc">–</div><div class="s" id="rgAncS">–</div></div>
+        <div class="stat"><div class="l">Expected move (1σ)</div><div class="v" id="rgEm">–</div><div class="s" id="rgEmS">–</div></div>
+        <div class="stat"><div class="l">1σ range</div><div class="v sm" id="rgRange">–</div><div class="s" id="rgRangeS">≈ 68 % under normality</div></div>
+        <div class="stat"><div class="l">Volatility used</div><div class="v" id="rgVol">–</div><div class="s" id="rgVolS">–</div></div>
+      </div>
+      <div class="card pad-s">
+        <p class="fig-t">σ-ladder</p><p class="fig-s" id="rgTableSub">Levels from the selected anchor. Historical columns: share of the last five years’ sessions whose high (above) or low (below) reached the level from the prior close.</p>
+        <div class="tbl" style="max-height:none"><table id="rgTable"><thead><tr><th scope="col">Level</th><th scope="col" class="num">Price</th><th scope="col" class="num">Distance</th><th scope="col" class="num">Reached (5 y)</th><th scope="col" class="num">Normal</th></tr></thead><tbody></tbody></table></div>
+      </div>
+      <figure class="fig card pad-s" id="figRg"><p class="fig-t" id="rgChartT">Latest session against its implied range</p><p class="fig-s" id="rgChartS">5-minute bars, futures-equivalent (index + basis); ladder from the prior close and the prior close’s volatility.</p>
+        <ul class="legend"><li><span class="key k-s1"></span>Price</li><li><span class="key rect k-s1" style="opacity:.3"></span>±1σ range</li><li><span class="key k-ref"></span>σ-levels</li></ul>
+        <div class="chart" data-label="Latest session's price path with its implied sigma levels."></div>
+        <p class="read" id="rgChartRead"></p>
+        <details class="tv"><summary>Data table</summary><div class="tbl"></div></details></figure>
+    </div>
+  </div>
+
+  <h2>How often do the levels hold?</h2>
+  <p class="sub" style="margin-bottom:14px">Every session of the last five years, measured from the prior close with the prior close’s implied vol. Descriptive statistics on public Cboe and Nasdaq data — a check on the ruler, not a trading rule.</p>
+  <div class="ctl-row" style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-bottom:12px">
+    <div class="seg" id="rgCalP" role="group" aria-label="Period" style="min-width:240px"><button type="button" data-v="full" aria-pressed="true">5 years</button><button type="button" data-v="last_year">Last 12 months</button></div>
+    <span class="fn" id="rgCalWhich"></span>
+  </div>
+  <div class="stats" aria-live="polite" style="margin-bottom:14px">
+    <div class="stat"><div class="l">Closed inside ±1σ</div><div class="v" id="rgC1">–</div><div class="s">normal: 68.3 %</div></div>
+    <div class="stat"><div class="l">Closed beyond ±2σ</div><div class="v" id="rgC2">–</div><div class="s">normal: 4.6 %</div></div>
+    <div class="stat"><div class="l">Realized ÷ implied vol</div><div class="v" id="rgRv">–</div><div class="s">close-to-close, RMS</div></div>
+    <div class="stat"><div class="l">Sessions</div><div class="v" id="rgN">–</div><div class="s" id="rgNS">–</div></div>
+  </div>
+  <div class="grid-2">
+    <figure class="fig card pad-s" id="figRgCal"><p class="fig-t">Close inside ±kσ of the prior close</p><p class="fig-s">Observed share of sessions vs. the normal distribution.</p>
+      <ul class="legend"><li><span class="key rect k-s1"></span>Observed</li><li><span class="key rect k-ref"></span>Normal</li></ul>
+      <div class="chart" data-label="Share of sessions that closed inside plus or minus k sigma, observed versus normal."></div><details class="tv"><summary>Data table</summary><div class="tbl"></div></details></figure>
+    <figure class="fig card pad-s" id="figRgTouch"><p class="fig-t">Intraday touches of +kσ and −kσ</p><p class="fig-s">Share of sessions whose high / low reached the level vs. a driftless random walk.</p>
+      <ul class="legend"><li><span class="key rect k-s1"></span>High reached +kσ</li><li><span class="key rect k-s2"></span>Low reached −kσ</li><li><span class="key rect k-ref"></span>Random walk</li></ul>
+      <div class="chart" data-label="Share of sessions whose high or low touched plus or minus k sigma, observed versus random walk."></div><details class="tv"><summary>Data table</summary><div class="tbl"></div></details></figure>
+  </div>
+  <p class="read" id="rgCalRead" style="margin-top:12px"></p>
+  <div class="callout" style="margin-top:16px"><p><b>What the ladder is — and isn’t.</b> The σ-levels are the market’s price of dispersion, not support or resistance. The VIX and VXN are 30-day measures, so using them for one day assumes a flat term structure; VIX1D prices the next day directly and is better calibrated. The variance risk premium makes the 30-day ruler too wide on an average day, while fat tails and the skew make the downside breaks more frequent than a normal distribution suggests.</p></div>
   </div>
 </section>
 
@@ -1382,6 +1453,7 @@ document.querySelectorAll('[data-text]').forEach(el => { const v = cfg(el.datase
 const ICONS = {
   home: '<path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/>',
   live: '<circle cx="12" cy="12" r="2.2"/><path d="M7.8 7.8a6 6 0 0 0 0 8.4M16.2 7.8a6 6 0 0 1 0 8.4M5 5a10 10 0 0 0 0 14M19 5a10 10 0 0 1 0 14"/>',
+  range: '<path d="M4 4v16M20 4v16"/><path d="M4 12h16"/><path d="M8 8.5 4.5 12 8 15.5M16 8.5l3.5 3.5-3.5 3.5"/>',
   surface: '<path d="M3 3v18h18"/><path d="M6 16c2.5-1 3.5-7 6.5-7s3 5 5.5 5"/><path d="M6 12c2-3 4-5 6-5"/>',
   sigma: '<path d="M18 5H7l6 7-6 7h11"/>',
   loop: '<path d="M4 12a8 8 0 0 1 13.7-5.7L20 8"/><path d="M20 4v4h-4"/><path d="M20 12a8 8 0 0 1-13.7 5.7L4 16"/><path d="M4 20v-4h4"/>',
@@ -1394,6 +1466,7 @@ const ICONS = {
 const TABS = [
   { id: 'overview', label: 'Overview', icon: 'home' },
   { id: 'live', label: 'Live Market', icon: 'live', group: 'Tools', badge: 'LIVE', color: '#ff453a', desc: 'Today’s SPX surface, model-free implied moves, VIX term structure, dealer gamma and moneyness — from Cboe delayed data, rebuilt every 30 minutes.' },
+  { id: 'range', label: 'Implied Range', icon: 'range', group: 'Tools', badge: 'LIVE', color: '#ff9f0a', desc: 'ES & NQ σ-ladder from VIX, VIX1D, VXN or the chain (IV ÷ 16), anchored at the futures’ fair value — plus five years of how often the levels held.' },
   { id: 'surface', label: 'Vol Surface', icon: 'surface', group: 'Tools', badge: '3D', color: '#0a84ff', desc: 'SSVI surface in 3D with butterfly and calendar arbitrage checks, local vol and the implied density.' },
   { id: 'greeks', label: 'Options & Greeks', icon: 'sigma', group: 'Tools', badge: '3D', color: '#5e5ce6', desc: 'Strategy builder: P&L and 13 greeks to third order as surfaces, finite-difference checked.' },
   { id: 'dealer', label: 'Dealer Gamma', icon: 'loop', group: 'Tools', color: '#ff9f0a', desc: 'Dealer-hedging feedback: gamma flip, vol multiplier and Monte Carlo paths under three positioning assumptions.' },
@@ -1403,7 +1476,7 @@ const TABS = [
   { id: 'research', label: 'Research', icon: 'doc', group: 'Profile' },
   { id: 'about', label: 'About', icon: 'person', group: 'Profile' },
 ];
-const ALIAS = { market: 'live', lab: 'dealer', overfit: 'backtest', backtests: 'backtest', work: 'overview', top: 'overview', teaching: 'about', vol: 'surface' };
+const ALIAS = { market: 'live', ranges: 'range', em: 'range', lab: 'dealer', overfit: 'backtest', backtests: 'backtest', work: 'overview', top: 'overview', teaching: 'about', vol: 'surface' };
 const svgIcon = k => `<svg viewBox="0 0 24 24" aria-hidden="true">${ICONS[k]}</svg>`;
 const INITS = {}, inited = new Set();
 function buildNav() {
@@ -2437,6 +2510,7 @@ const HL_SERIES = [
   { k: 'SPX', n: 'S&P 500', f: v => num(v, 2), big: true },
   { k: 'VIX1D', n: 'VIX1D', f: v => v.toFixed(2) }, { k: 'VIX9D', n: 'VIX9D', f: v => v.toFixed(2) },
   { k: 'VIX', n: 'VIX', f: v => v.toFixed(2) }, { k: 'VIX3M', n: 'VIX3M', f: v => v.toFixed(2) }, { k: 'VVIX', n: 'VVIX', f: v => v.toFixed(2) },
+  { k: 'NDX', n: 'Nasdaq-100', f: v => num(v, 2), big: true }, { k: 'VXN', n: 'VXN', f: v => v.toFixed(2) },
   { k: 'move', n: 'Implied move', long: 'Model-free implied move to the next expiry — my measure', f: v => '±' + v.toFixed(2) + ' %', mine: true,
     ref: { k: 'VIX1D', tf: v => v / Math.sqrt(252), n: 'VIX1D ÷ √252 — Cboe’s one-day move', f: v => '±' + v.toFixed(2) + ' %' } },
   { k: 'v30', n: '30-day vol (mine)', long: '30-day model-free implied vol — my replication from the chain', f: v => v.toFixed(2) + ' %', mine: true,
@@ -2573,6 +2647,140 @@ function initHL(d) {
   }
   draw();
 }
+
+/* ---------- implied range: ES & NQ sigma ladder + calibration ---------- */
+INITS.range = () => LIVE.on(d => {
+  if (!d || !d.range) { $('rgEmpty').hidden = false; $('rgBody').hidden = true; $('rgStatus').textContent = 'unavailable'; return; }
+  liveStatus($('rgStatus'), $('rgAsof'), d);
+  const RG = d.range, H = d.history, B = d.bars || [], K = RG.K;
+  const VOLS = {
+    ES: [{ v: 'VIX', n: 'VIX', hint: 'Cboe’s 30-day implied vol — the classic “VIX ÷ 16” rule.' }, { v: 'VIX1D', n: 'VIX1D', hint: 'Cboe’s one-day implied vol: prices the next session directly.' }, { v: 'CHAIN', n: 'Chain', hint: 'My model-free implied move to the next expiry, straight from the SPX chain (day only).' }],
+    NQ: [{ v: 'VXN', n: 'VXN', hint: 'Cboe’s 30-day Nasdaq-100 implied vol (VXN ÷ 16 per day).' }],
+  };
+  const LADDER = [2, 1.5, 1, 0.75, 0.5, 0.25];
+  let C = 'ES', V = 'VIX', Hz = 1, A = 'fair', P = 'full';
+  const store = { get: k => { try { return localStorage.getItem('rg_' + k); } catch (e) { return null; } }, set: (k, v) => { try { localStorage.setItem('rg_' + k, v); } catch (e) {} } };
+  const fmtP = v => num(v, C === 'ES' ? 2 : 2);
+  const vSeg = $('rgV');
+  function buildVolSeg() {
+    vSeg.replaceChildren();
+    VOLS[C].forEach((o, i) => { const b = document.createElement('button'); b.type = 'button'; b.dataset.v = o.v; b.textContent = o.n; if (o.v === V) b.setAttribute('aria-pressed', 'true'); vSeg.append(b); });
+    if (!VOLS[C].some(o => o.v === V)) { V = VOLS[C][0].v; vSeg.firstChild.setAttribute('aria-pressed', 'true'); }
+  }
+  vSeg.addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; vSeg.querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', String(x === b))); V = b.dataset.v; if (V === 'CHAIN' && Hz !== 1) setHz(1); update(); });
+  segmented('rgC', v => { C = v; buildVolSeg(); loadCustom(); update(); });
+  const setHz = h => { Hz = h; $('rgH').querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', String(+x.dataset.v === h))); };
+  segmented('rgH', v => { Hz = +v; if (V === 'CHAIN' && Hz !== 1) { V = 'VIX'; buildVolSeg(); } update(); });   // the chain measure is per expiry; weeks and months use the 30-day VIX
+  segmented('rgA', v => { A = v; $('rgCustomRow').hidden = A !== 'custom'; update(); });
+  segmented('rgCalP', v => { P = v; drawCal(); });
+  const cust = $('rgCustom');
+  const loadCustom = () => { const c = RG.contracts[C]; cust.value = store.get('custom_' + C) || (c.fair ? c.fair.toFixed(2) : ''); };
+  cust.addEventListener('input', () => { store.set('custom_' + C, cust.value); update(); });
+  buildVolSeg(); loadCustom();
+
+  const hIdx = Object.fromEntries(H.dates.map((x, i) => [x, i]));
+  function current() {
+    const c = RG.contracts[C], basis = c.basis || 0;
+    const anchor = A === 'fair' ? (c.fair ?? c.spot) : A === 'prev' ? (c.prev_close != null ? c.prev_close + basis : null) : parseFloat(String(cust.value).replace(',', '.'));
+    let sig = null, volLabel = '', volSub = '';
+    if (V === 'CHAIN') { sig = c.model_move != null ? c.model_move / 100 : null; volLabel = c.model_move != null ? '±' + c.model_move.toFixed(2) + ' %' : '–'; volSub = 'model-free, to ' + (c.model_expiry ? fmtExp(c.model_expiry) : 'next expiry'); }
+    else { const iv = c.vols[V]; sig = iv ? iv / 100 * Math.sqrt(Hz / 252) : null; volLabel = iv ? iv.toFixed(2) : '–'; volSub = `${V} · ÷ ${Math.sqrt(252 / Hz).toFixed(2)} for ${Hz === 1 ? 'one day' : Hz === 5 ? 'one week' : 'one month'}`; }
+    return { c, basis, anchor, sig, volLabel, volSub };
+  }
+  function update() {
+    const { c, basis, anchor, sig, volLabel, volSub } = current();
+    $('rgCode').textContent = `${c.code} · expires ${fmtExp(c.expiry)}`;
+    $('rgBasis').textContent = c.basis != null ? 'basis ' + (c.basis >= 0 ? '+' : '−') + num(Math.abs(c.basis), 2) : '';
+    $('rgVHint').textContent = (VOLS[C].find(o => o.v === V) || {}).hint || '';
+    $('rgAnc').textContent = fin(anchor) ? fmtP(anchor) : '–';
+    $('rgAncS').textContent = A === 'fair' ? `${c.index} ${num(c.spot, 2)} + basis` : A === 'prev' ? `prior close ${c.prev_close != null ? num(c.prev_close, 2) : '–'} + basis` : 'your price';
+    const em = fin(anchor) && fin(sig) ? anchor * sig : null;
+    $('rgEm').textContent = em ? '±' + num(em, 1) : '–';
+    $('rgEmS').textContent = em ? `±${(sig * 100).toFixed(2)} % · ${Hz === 1 ? 'one day' : Hz === 5 ? 'one week' : 'one month'}` : '';
+    $('rgRange').textContent = em ? `${fmtP(anchor - em)} – ${fmtP(anchor + em)}` : '–';
+    $('rgVol').textContent = volLabel; $('rgVolS').textContent = volSub;
+    // ladder table
+    const calKey = C === 'NQ' ? 'NQ_VXN' : V === 'VIX1D' ? 'ES_VIX1D' : V === 'VIX' ? 'ES_VIX' : null;
+    const cal = calKey && RG.calibration[calKey] ? RG.calibration[calKey].full : null;
+    const tb = $('rgTable').tBodies[0]; tb.replaceChildren();
+    const row = (lab, px, dist, hist, theo, strong) => { const tr = tb.insertRow(); if (strong) tr.style.fontWeight = '600'; [lab, px, dist, hist, theo].forEach((v, i) => { const td = tr.insertCell(); td.textContent = v; if (i) td.className = 'num'; }); };
+    const histFor = (k, up) => { if (!cal || Hz !== 1) return '–'; const i = K.indexOf(k); return i < 0 ? '–' : pct((up ? cal.touch_up : cal.touch_dn)[i], 0); };
+    const theoFor = k => { const i = K.indexOf(k); return i < 0 || Hz !== 1 ? '–' : pct(RG.theory_touch[i], 0); };
+    if (em) {
+      LADDER.forEach(k => row(`+${k}σ`, fmtP(anchor + k * em), `+${num(k * em, 1)}`, histFor(k, true), theoFor(k), k === 1));
+      row('Anchor', fmtP(anchor), '0', '', '', true);
+      LADDER.slice().reverse().forEach(k => row(`−${k}σ`, fmtP(anchor - k * em), `−${num(k * em, 1)}`, histFor(k, false), theoFor(k), k === 1));
+    }
+    $('rgTableSub').textContent = Hz === 1 ? (cal ? `Levels from the selected anchor. “Reached”: share of the last ${cal.n.toLocaleString('en-US')} sessions whose high (above) or low (below) touched the level from the prior close, with ${calKey.split('_')[1]}; “Normal”: a driftless random walk.` : 'Levels from the selected anchor. No history for the chain measure yet — it is archived daily from now on.') : 'Levels from the selected anchor; historical hit rates are measured for one-day ranges only.';
+    drawSession(); drawCal();
+  }
+
+  // latest session vs. its own implied range (prior close + prior close's IV)
+  const fig = $('figRg'), host = chart(fig, drawSession);
+  function drawSession() {
+    const s = B[B.length - 1], c = RG.contracts[C], idxK = c.index, basis = c.basis || 0;
+    const ivK = C === 'NQ' ? 'VXN' : V === 'CHAIN' ? 'VIX1D' : V;
+    if (!s || !s[idxK] || !s[idxK].some(fin)) { chartBase(host, { height: 300, x: [0, 1], y: [0, 1], yTicks: false, xTicks: false, baseline: false }); $('rgChartRead').textContent = 'No intraday bars for this index yet.'; return; }
+    const prevDay = H.dates.filter(x => x < s.date).pop(), pc = prevDay != null ? H[idxK][hIdx[prevDay]] : null, piv = prevDay != null ? H[ivK][hIdx[prevDay]] : null;
+    if (!fin(pc) || !fin(piv)) { chartBase(host, { height: 300, x: [0, 1], y: [0, 1], yTicks: false, xTicks: false, baseline: false }); $('rgChartRead').textContent = 'Prior close or volatility missing for this session.'; return; }
+    const anc = pc + basis, em = anc * piv / 100 / Math.sqrt(252), px = s[idxK].map(v => (fin(v) ? v + basis : null));
+    const vals = px.filter(fin).concat([anc - 1.1 * em, anc + 1.1 * em]);
+    const n = s.t.length;
+    const base = chartBase(host, { height: 320, m: { l: 62, r: 96, b: 34 }, x: [0, n - 1], y: niceDomain(Math.min(...vals), Math.max(...vals), 6), xTicks: false, baseline: false, yFmt: v => num(v, 0) });
+    const { svg, x, y, plot } = base;
+    const lo = Math.max(plot.y0, y(anc + em)), hi = Math.min(plot.y1, y(anc - em));
+    if (hi > lo) S('rect', { x: plot.x0, y: lo, width: plot.x1 - plot.x0, height: hi - lo, class: 'wash-s1' }, svg);
+    const yd = [y.inv(plot.y1), y.inv(plot.y0)];
+    [...LADDER.map(k => [k, anc + k * em]), [0, anc], ...LADDER.map(k => [-k, anc - k * em])].forEach(([k, lv]) => {
+      if (lv < yd[0] || lv > yd[1]) return;
+      S('line', { x1: plot.x0, x2: plot.x1, y1: y(lv), y2: y(lv), class: k === 0 ? 'marker' : 'grid', 'stroke-opacity': k === 0 ? 0.7 : 1, style: Math.abs(k) === 1 ? 'stroke:var(--s1);stroke-opacity:.55' : '' }, svg);
+      txt(svg, plot.x1 + 6, y(lv) + 4, (k === 0 ? 'prior close ' : (k > 0 ? '+' : '−') + Math.abs(k) + 'σ ') + num(lv, 0), Math.abs(k) === 1 || k === 0 ? 'lbl-strong' : 'ann');
+    });
+    s.t.forEach((hm, i) => { if (hm.endsWith(':00') && x(i) - x(0) >= 46) txt(svg, x(i), plot.y1 + 17, hm, 'tick', 'middle'); });
+    txt(svg, x(0), plot.y1 + 17, s.t[0], 'tick', 'start');
+    S('path', { d: linePath(s.t.map((_, i) => i), px, x, y), class: 'ln ln-s1' }, svg);
+    const li = px.map((v, i) => (fin(v) ? i : -1)).filter(i => i >= 0).pop(), last = px[li];
+    S('circle', { cx: x(li), cy: y(last), r: 5, class: 'ring f-s1' }, svg);
+    const dot = S('circle', { r: 4, class: 'ring f-s1', visibility: 'hidden' }, svg);
+    interact(base, host, n, i => x(i), i => { if (!fin(px[i])) return null; dot.setAttribute('cx', x(i)); dot.setAttribute('cy', y(px[i])); dot.setAttribute('visibility', 'visible'); return { title: `${fmtExp(s.date)} · ${s.t[i]} ET`, rows: [{ value: num(px[i], 2), label: c.code + ' (fair)', color: col('--s1') }, { value: minus(((px[i] - anc) / em).toFixed(2)) + 'σ', label: 'from prior close' }], y: y(px[i]) }; }, { onClear: () => dot.setAttribute('visibility', 'hidden'), focusIndex: li });
+    const hiV = Math.max(...px.filter(fin)), loV = Math.min(...px.filter(fin)), zc = (last - anc) / em;
+    $('rgChartT').textContent = `${fmtExp(s.date)} against its implied range`;
+    $('rgChartS').textContent = `5-minute bars of ${idxK} + basis (${c.code}); ladder from the prior close ${num(anc, 2)} with ${ivK} ${piv.toFixed(2)} → 1σ = ±${num(em, 1)}.`;
+    $('rgChartRead').textContent = `The session ${li === n - 1 ? 'closed' : 'last traded'} at ${minus(zc.toFixed(2))}σ; high ${minus(((hiV - anc) / em).toFixed(2))}σ, low ${minus(((loV - anc) / em).toFixed(2))}σ — ${Math.abs(zc) <= 1 ? 'inside' : 'outside'} its 1σ range.`;
+    fillTable(fig, ['Time (ET)', 'Price (fair)', 'σ from prior close'], s.t.map((hm, i) => [hm, fin(px[i]) ? num(px[i], 2) : '–', fin(px[i]) ? minus(((px[i] - anc) / em).toFixed(2)) : '–']));
+  }
+
+  // calibration charts
+  const figC = $('figRgCal'), hostC = chart(figC, drawCal), figT = $('figRgTouch'), hostT = chart(figT, drawTouch);
+  function calNow() { const key = C === 'NQ' ? 'NQ_VXN' : V === 'VIX1D' ? 'ES_VIX1D' : 'ES_VIX'; const e = RG.calibration[key]; return { key, cal: e ? (e[P] || e.full) : null }; }
+  function groups(host, series, titleFmt, fig, head) {
+    const nG = K.length, vmax = Math.max(0.1, ...series.flatMap(s => s.v));
+    const base = chartBase(host, { height: 250, m: { l: 42, b: 30 }, x: [-0.5, nG - 0.5], y: niceDomain(0, Math.min(1, vmax * 1.08), 4), xTicks: false, yFmt: v => Math.round(v * 100) + ' %' });
+    const { svg, x, y, plot } = base, slot = (x(1) - x(0)) * 0.8, bw = Math.min(22, slot / series.length - 2), marks = [];
+    K.forEach((k, i) => {
+      series.forEach((s, j) => { const cx = x(i) + (j - (series.length - 1) / 2) * (bw + 2); marks.push(S('path', { d: vbar(cx, bw, y(0), y(s.v[i]), bw < 6 ? 1 : 3), class: 'mk f-' + s.cls }, svg)); });
+      txt(svg, x(i), plot.y1 + 17, '±' + k + 'σ', 'tick', 'middle');
+    });
+    interact(base, host, nG, i => x(i), i => { marks.forEach((m2, j) => m2.classList.toggle('hl', Math.floor(j / series.length) === i)); return { title: titleFmt(K[i]), rows: series.map(s => ({ value: pct(s.v[i]), label: s.label, color: col('--' + s.cls) })), y: y(Math.max(...series.map(s => s.v[i]))) }; }, { crosshair: false, onClear: () => marks.forEach(m2 => m2.classList.remove('hl')) });
+    fillTable(fig, head, K.map((k, i) => ['±' + k + 'σ', ...series.map(s => pct(s.v[i]))]));
+  }
+  function drawCal() {
+    const { key, cal } = calNow();
+    if (!cal) { chartBase(hostC, { height: 250, x: [0, 1], y: [0, 1], yTicks: false, xTicks: false, baseline: false }); return; }
+    $('rgCalWhich').textContent = `${key.replace('_', ' with ')} · ${cal.from} – ${cal.to}`;
+    $('rgC1').textContent = pct(cal.inside[K.indexOf(1)]); $('rgC2').textContent = pct(1 - cal.inside[K.indexOf(2)]);
+    $('rgRv').textContent = Math.round(cal.rv_over_iv * 100) + ' %'; $('rgN').textContent = cal.n.toLocaleString('en-US'); $('rgNS').textContent = P === 'full' ? 'last five years' : 'last 12 months';
+    groups(hostC, [{ v: cal.inside, cls: 's1', label: 'observed' }, { v: RG.theory_inside, cls: 'ref', label: 'normal' }], k => `Close inside ±${k}σ`, figC, ['Band', 'Observed', 'Normal']);
+    drawTouch();
+    const i1 = K.indexOf(1), i15 = K.indexOf(1.5), idx = key.startsWith('NQ') ? 'NQ (Nasdaq-100)' : 'ES (S&P 500)', iv = key.split('_')[1];
+    $('rgCalRead').textContent = `${idx} closed inside its ${iv}-implied 1σ range on ${pct(cal.inside[i1])} of ${cal.n.toLocaleString('en-US')} sessions (normal: 68.3 %); realized vol ran at ${Math.round(cal.rv_over_iv * 100)} % of implied — the variance risk premium. The downside is heavier: the low reached −1.5σ on ${pct(cal.touch_dn[i15])} of sessions, the high +1.5σ on ${pct(cal.touch_up[i15])}.`;
+  }
+  function drawTouch() {
+    const { cal } = calNow(); if (!cal) return;
+    groups(hostT, [{ v: cal.touch_up, cls: 's1', label: 'high reached +kσ' }, { v: cal.touch_dn, cls: 's2', label: 'low reached −kσ' }, { v: RG.theory_touch, cls: 'ref', label: 'random walk (each side)' }], k => `Touch ±${k}σ intraday`, figT, ['Level', 'High ≥ +kσ', 'Low ≤ −kσ', 'Random walk']);
+  }
+  update();
+});
 
 /* ---------- live hooks in the other tools ---------- */
 LIVE.on(d => {

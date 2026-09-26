@@ -22,6 +22,10 @@ from __future__ import annotations
 import argparse, csv, datetime as dt, io, json, math, os, re, sys, time, urllib.request
 from zoneinfo import ZoneInfo
 
+import sys as _sys, os as _os
+_sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
+import implied_range  # noqa: E402  (sibling module)
+
 import numpy as np
 from scipy.optimize import brentq, least_squares
 from scipy.special import ndtr
@@ -395,7 +399,8 @@ def snapshot(chain: dict, quotes: dict, hist: dict) -> dict:
     }
 
 
-SERIES = ("SPX", "VIX1D", "VIX9D", "VIX", "VIX3M", "VVIX")
+SERIES = ("SPX", "VIX1D", "VIX9D", "VIX", "VIX3M", "VVIX", "VXN")    # Cboe daily history CSVs
+BAR_SERIES = SERIES + ("NDX",)                                   # Cboe 1-minute bars
 INTRADAY_SESSIONS = 5
 
 
@@ -451,11 +456,16 @@ def fetch_bars() -> dict | None:
     09:35-16:00 ET grid (last non-zero close at or before each slot; the first vol-index bar is often 0)."""
     slots = [f"{9 + (35 + 5 * i) // 60:02d}:{(35 + 5 * i) % 60:02d}" for i in range(78)]
     out, day = {"t": slots}, None
-    for name in SERIES:
-        rows = json.loads(get(CHARTS.format(name)))["data"]
+    for name in BAR_SERIES:
+        try:
+            rows = json.loads(get(CHARTS.format(name)))["data"]
+        except Exception:
+            rows = []
         pts = sorted((r["datetime"][11:16], float(r["price"]["close"])) for r in rows if r.get("price") and r["price"].get("close"))
         if not pts:
-            return None
+            if name == "SPX":
+                return None
+            out[name] = [None] * len(slots); continue
         day = day or rows[0]["datetime"][:10]
         vals, j, last = [], 0, None
         for sl in slots:
@@ -491,12 +501,28 @@ def main():
     ap.add_argument("--chain", help="use a cached chain JSON instead of downloading (testing)")
     a = ap.parse_args()
     chain = json.load(open(a.chain, encoding="utf-8")) if a.chain else json.loads(get(f"{BASE}/options/_SPX.json"))
-    quotes = {s.strip("_"): quote(s) for s in ("_VIX1D", "_VIX9D", "_VIX", "_VIX3M", "_VVIX")}
+    quotes = {s.strip("_"): quote(s) for s in ("_VIX1D", "_VIX9D", "_VIX", "_VIX3M", "_VVIX", "_VXN", "_NDX")}
     # five years of daily closes, aligned on S&P 500 trading days (VIX1D exists only since 2022)
     hs = {n: dict(history(n, days=1400)) for n in SERIES}
+    try:
+        ndx_ohlc = implied_range.nasdaq_ndx_history()           # Nasdaq's own API (Cboe does not serve NDX history)
+    except Exception as e:
+        print("NDX history unavailable:", e); ndx_ohlc = []
+    hs["NDX"] = {r[0]: r[4] for r in ndx_ohlc}
     dates = sorted(hs["SPX"])[-1260:]
-    hist = {"dates": dates, **{n: [hs[n].get(d) for d in dates] for n in SERIES}}
+    hist = {"dates": dates, **{n: [hs[n].get(d) for d in dates] for n in (*SERIES, "NDX")}}
     snap = snapshot(chain, quotes, hist)
+    try:
+        ndx_chain = json.loads(get(f"{BASE}/options/_NDX.json"))
+    except Exception as e:
+        print("NDX chain unavailable:", e); ndx_chain = None
+    try:
+        spx_ohlc = implied_range.cboe_spx_ohlc()
+    except Exception as e:
+        print("SPX OHLC unavailable:", e); spx_ohlc = []
+    rng = implied_range.build(snap, quotes, ndx_chain, hist)
+    rng["calibration"] = implied_range.calibration_block(spx_ohlc, ndx_ohlc, hs)
+    snap["range"] = rng
     os.makedirs(a.out, exist_ok=True)
     hdir = os.path.join(a.out, "history")
     # end-of-day archive (small summary), one file per trading date
@@ -517,7 +543,7 @@ def main():
     with open(os.path.join(a.out, "latest.js"), "w", encoding="utf-8") as f: f.write("window.__LIVE__=" + body + ";" + chr(10))
     e0 = snap["expiries"][0] if snap["expiries"] else {}
     print(f"SPX {snap['spot']['level']:.2f} | expiries {len(snap['expiries'])} | next {e0.get('expiry')} move ±{(e0.get('rep_move') or 0)*100:.2f}% "
-          f"| zero-gamma(A) {snap['gex']['zero_gamma_A']} | intraday {len(snap['intraday'])} pts | bars {len(snap['bars'])} sessions | archive {len(snap['archive'])} d | {len(body)/1024:.0f} KB")
+          f"| zero-gamma(A) {snap['gex']['zero_gamma_A']} | intraday {len(snap['intraday'])} pts | bars {len(snap['bars'])} sessions | archive {len(snap['archive'])} d | range ES {snap['range']['contracts']['ES']['fair']} NQ {snap['range']['contracts']['NQ']['fair']} | calib {list(snap['range']['calibration'])} | {len(body)/1024:.0f} KB")
 
 
 if __name__ == "__main__":
