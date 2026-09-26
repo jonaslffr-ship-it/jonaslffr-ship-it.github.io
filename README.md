@@ -42,6 +42,7 @@ const SITE = {
 
 `pipeline/live_snapshot.py` downloads the SPX/SPXW chain (~29,000 contracts) and the VIX family from Cboe’s public delayed-quote endpoints and writes `data/live/latest.json` and `latest.js` (~95 KB, derived analytics only — forwards, SVI fits, model-free variances, gamma aggregates, bucket shares, index levels). Cboe does not send CORS headers, so browsers cannot fetch it directly; the GitHub Action does it server-side.
 
+- History & live chart: five years of Cboe daily closes (S&P 500, VIX1D, VIX9D, VIX, VIX3M, VVIX), a rolling intraday record of the 30-minute snapshots (last five sessions, `data/live/intraday.json` — each run restores it from the deployed site, so it grows without a commit per snapshot) and an end-of-day archive of my own measures (implied move, 30-day model-free vol, zero-gamma level) compiled from `data/live/history/`.
 - `pipeline/test_live_snapshot.py` — known-answer tests on a synthetic Black–Scholes chain (forward, rate, ATM IV, replicated variance, SVI fit, bucket totals); runs before every snapshot and blocks publishing on failure.
 - `.github/workflows/live-data.yml` — every 30 minutes during US trading hours (plus once after the close): test → snapshot → deploy to Pages; after the close it commits a small end-of-day summary to `data/live/history/`.
 - Local refresh: `pip install -r pipeline/requirements.txt && python pipeline/live_snapshot.py`.

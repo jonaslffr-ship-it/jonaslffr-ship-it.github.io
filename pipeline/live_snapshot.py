@@ -395,6 +395,53 @@ def snapshot(chain: dict, quotes: dict, hist: dict) -> dict:
     }
 
 
+SERIES = ("SPX", "VIX1D", "VIX9D", "VIX", "VIX3M", "VVIX")
+INTRADAY_SESSIONS = 5
+
+
+def point_from(snap: dict) -> dict:
+    """One observation of every series this site charts (index levels + my own derived measures)."""
+    e0 = snap["expiries"][0] if snap["expiries"] else {}
+    v30 = next((c["mine"] for c in snap["checks"]["replication_vs_cboe"] if c["index"] == "VIX"), None)
+    pt = {"SPX": round(snap["spot"]["level"], 2), **{k: v["level"] for k, v in snap["vix"].items()},
+          "move": None if e0.get("rep_move") is None else round(e0["rep_move"] * 100, 4),
+          "v30": v30, "zg": snap["gex"]["zero_gamma_A"]}
+    return pt
+
+
+def update_intraday(path: str, snap: dict) -> list:
+    """Rolling intraday record (last INTRADAY_SESSIONS sessions). In CI the previous file is fetched from the
+    deployed site first, so the record grows without committing every 30-minute snapshot."""
+    rows = []
+    if os.path.exists(path):
+        try:
+            rows = json.load(open(path, encoding="utf-8"))
+        except (ValueError, OSError):
+            rows = []
+    t = snap["meta"]["valuation_time_et"]
+    if not rows or rows[-1]["t"] != t:
+        rows.append({"t": t, **point_from(snap)})
+    rows.sort(key=lambda r: r["t"])
+    keep = sorted({r["t"][:10] for r in rows})[-INTRADAY_SESSIONS:]
+    rows = [r for r in rows if r["t"][:10] in keep]
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(rows, f, separators=(",", ":"))
+    return rows
+
+
+def compile_archive(hdir: str) -> list:
+    out = []
+    if os.path.isdir(hdir):
+        for fn in sorted(os.listdir(hdir)):
+            if fn.endswith(".json"):
+                try:
+                    out.append(json.load(open(os.path.join(hdir, fn), encoding="utf-8")))
+                except (ValueError, OSError):
+                    continue
+    return [{"d": r["date"], "SPX": r.get("spot"), **(r.get("vix") or {}), "move": None if r.get("next_move") is None else round(r["next_move"] * 100, 4),
+             "v30": r.get("v30"), "zg": r.get("zero_gamma_A")} for r in out]
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default=os.path.join(os.path.dirname(__file__), "..", "data", "live"))
@@ -402,27 +449,31 @@ def main():
     a = ap.parse_args()
     chain = json.load(open(a.chain, encoding="utf-8")) if a.chain else json.loads(get(f"{BASE}/options/_SPX.json"))
     quotes = {s.strip("_"): quote(s) for s in ("_VIX1D", "_VIX9D", "_VIX", "_VIX3M", "_VVIX")}
-    hs = {n: history(n) for n in ("VIX1D", "VIX9D", "VIX", "VIX3M")}
-    dates = sorted(set.intersection(*[set(d for d, _ in v) for v in hs.values()]))[-250:]
-    hmap = {n: dict(v) for n, v in hs.items()}
-    hist = {"dates": dates, **{n: [hmap[n][d] for d in dates] for n in hs}}
+    # five years of daily closes, aligned on S&P 500 trading days (VIX1D exists only since 2022)
+    hs = {n: dict(history(n, days=1400)) for n in SERIES}
+    dates = sorted(hs["SPX"])[-1260:]
+    hist = {"dates": dates, **{n: [hs[n].get(d) for d in dates] for n in SERIES}}
     snap = snapshot(chain, quotes, hist)
     os.makedirs(a.out, exist_ok=True)
-    body = json.dumps(snap, separators=(",", ":"), allow_nan=False)
-    with open(os.path.join(a.out, "latest.json"), "w", encoding="utf-8") as f: f.write(body)
-    with open(os.path.join(a.out, "latest.js"), "w", encoding="utf-8") as f: f.write("window.__LIVE__=" + body + ";\n")
+    hdir = os.path.join(a.out, "history")
     # end-of-day archive (small summary), one file per trading date
     if not snap["meta"]["market_open"]:
         day = snap["meta"]["valuation_time_et"][:10]
-        hdir = os.path.join(a.out, "history"); os.makedirs(hdir, exist_ok=True)
+        os.makedirs(hdir, exist_ok=True)
         e0 = snap["expiries"][0] if snap["expiries"] else {}
+        pt = point_from(snap)
         summ = {"date": day, "spot": snap["spot"]["level"], "vix": {k_: v["level"] for k_, v in snap["vix"].items()},
                 "next_expiry": e0.get("expiry"), "next_move": e0.get("rep_move"), "zero_gamma_A": snap["gex"]["zero_gamma_A"],
-                "atm_term": [[e["days"], e["atm_iv"]] for e in snap["expiries"] if e["days"] <= 400]}
+                "v30": pt["v30"], "atm_term": [[e["days"], e["atm_iv"]] for e in snap["expiries"] if e["days"] <= 400]}
         with open(os.path.join(hdir, f"{day}.json"), "w", encoding="utf-8") as f: json.dump(summ, f, separators=(",", ":"))
+    snap["intraday"] = update_intraday(os.path.join(a.out, "intraday.json"), snap)
+    snap["archive"] = compile_archive(hdir)
+    body = json.dumps(snap, separators=(",", ":"), allow_nan=False)
+    with open(os.path.join(a.out, "latest.json"), "w", encoding="utf-8") as f: f.write(body)
+    with open(os.path.join(a.out, "latest.js"), "w", encoding="utf-8") as f: f.write("window.__LIVE__=" + body + ";" + chr(10))
     e0 = snap["expiries"][0] if snap["expiries"] else {}
     print(f"SPX {snap['spot']['level']:.2f} | expiries {len(snap['expiries'])} | next {e0.get('expiry')} move ±{(e0.get('rep_move') or 0)*100:.2f}% "
-          f"| zero-gamma(A) {snap['gex']['zero_gamma_A']} | {len(body)/1024:.0f} KB")
+          f"| zero-gamma(A) {snap['gex']['zero_gamma_A']} | intraday {len(snap['intraday'])} pts | archive {len(snap['archive'])} d | {len(body)/1024:.0f} KB")
 
 
 if __name__ == "__main__":

@@ -252,7 +252,16 @@ tr:last-child td{border-bottom:0}
 .tk .v{font-family:var(--display);font-size:19px;font-weight:650;font-variant-numeric:tabular-nums;white-space:nowrap}
 .c{font-size:11.5px;font-variant-numeric:tabular-nums}
 .up{color:#4cd964} .dn{color:#ff7b72}
-.status.live i{background:var(--good);animation:pulse 2.4s ease-out infinite} .status.closed i{background:var(--ref)} .status.stale i{background:var(--warn)}
+.status.live i{background:var(--good);animation:pulse 2.4s ease-out infinite}
+.hl-top{display:flex;flex-wrap:wrap;gap:12px 20px;align-items:center;justify-content:space-between;margin-bottom:14px}
+.hl-top .seg{min-width:280px}
+.hl-head{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:10px 24px;margin-bottom:6px}
+.hl-val{font-family:var(--display);font-size:40px;font-weight:700;letter-spacing:-.02em;line-height:1.1}
+.hl-meta{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px}
+.pulse-ring{fill:none;stroke:var(--s1);stroke-width:2;transform-box:fill-box;transform-origin:center;animation:ring 1.8s ease-out infinite}
+@keyframes ring{0%{opacity:.9;transform:scale(1)}100%{opacity:0;transform:scale(3.2)}}
+button.tk{border:0;text-align:left;font:inherit;color:inherit;cursor:pointer;transition:background .15s var(--ease)}
+button.tk:hover{background:var(--surface-3)} .status.closed i{background:var(--ref)} .status.stale i{background:var(--warn)}
 .tab .badge.live{background:rgba(255,69,58,.2);color:#ffa39c}
 .live{display:flex;gap:14px;align-items:flex-start;margin-top:14px;max-width:760px;padding:14px 18px;background:var(--surface);border-radius:var(--r);box-shadow:var(--ring)}
 .live .pulse{width:10px;height:10px;border-radius:50%;border:2px solid var(--ref);margin-top:6px;flex:none}
@@ -444,6 +453,17 @@ footer p{max-width:860px}
       <div class="stat"><div class="l">Zero-gamma level</div><div class="v" id="lvZg">–</div><div class="s" id="lvZgS">convention A</div></div>
       <div class="stat"><div class="l">Surface fit</div><div class="v" id="lvFit">–</div><div class="s" id="lvFitS">median SVI error</div></div>
     </div>
+
+
+    <h2 id="hl">History &amp; live</h2>
+    <figure class="fig card" id="figLvHL">
+      <div class="hl-top"><div class="chips" id="hlSer"></div><div class="seg" id="hlRng" role="group" aria-label="Time range"></div></div>
+      <div class="hl-head"><div><p class="fn" id="hlName" style="margin:0">–</p><div class="hl-val" id="hlVal">–</div></div>
+        <div class="hl-meta"><span class="status" id="hlTag"><i></i>–</span><span class="fn" id="hlChg"></span><span class="tiny" id="hlPct"></span></div></div>
+      <div class="chart" data-label="Chart of the selected series: daily history plus intraday snapshots and the live value."></div>
+      <p class="read" id="hlRead"></p>
+      <details class="tv"><summary>Data table</summary><div class="tbl"></div></details>
+    </figure>
 
     <h2>Implied volatility surface</h2>
     <div>
@@ -1506,7 +1526,7 @@ function chartBase(host, o) {
   if (o.xTitle) txt(ax, (m.l + W - m.r) / 2, H - 5, o.xTitle, 'axis-title', 'middle');
   return { svg, W, H, m, x, y, plot: { x0: m.l, x1: W - m.r, y0: m.t, y1: H - m.b } };
 }
-const linePath = (xs, ys, x, y) => { let d = '', pen = false; for (let i = 0; i < xs.length; i++) { if (!isFinite(ys[i])) { pen = false; continue; } d += (pen ? 'L' : 'M') + x(xs[i]).toFixed(1) + ',' + y(ys[i]).toFixed(1); pen = true; } return d; };
+const linePath = (xs, ys, x, y) => { let d = '', pen = false; for (let i = 0; i < xs.length; i++) { if (ys[i] == null || !isFinite(ys[i])) { pen = false; continue; } d += (pen ? 'L' : 'M') + x(xs[i]).toFixed(1) + ',' + y(ys[i]).toFixed(1); pen = true; } return d; };
 function vbar(px, w, yb, yt, r = 4) {
   const up = yt < yb, hgt = Math.abs(yb - yt), rr = Math.min(r, hgt / 2, w / 2), x0 = px - w / 2, x1 = px + w / 2;
   if (hgt < 0.5) return `M${x0},${yb}H${x1}`;
@@ -1575,7 +1595,7 @@ function lineChart(figId, o) { // generic multi-series line chart: o = {xs, seri
   const fig = $(figId);
   const host = chart(fig, draw);
   function draw() {
-    const all = o.series.flatMap(s => s.v).filter(isFinite);
+    const all = o.series.flatMap(s => s.v).filter(v => v != null && isFinite(v));
     const yd = o.yDomain ? o.yDomain() : niceDomain(Math.min(...all), Math.max(...all), 5);
     const base = chartBase(host, { height: o.height || 230, m: o.m, x: [o.xs[0], o.xs[o.xs.length - 1]], y: yd, xTitle: o.xTitle, yFmt: o.yFmt, xFmt: o.xFmt, baseline: o.baseline ?? (yd[0] < 0 && yd[1] > 0 ? 0 : yd[0]) });
     const { svg, x, y, plot } = base;
@@ -1584,8 +1604,8 @@ function lineChart(figId, o) { // generic multi-series line chart: o = {xs, seri
     if (o.over) o.over(base);
     const dots = o.series.map(s => S('circle', { r: 4.5, class: 'ring f-' + s.cls, visibility: 'hidden' }, svg));
     interact(base, host, o.xs.length, i => x(o.xs[i]), i => {
-      o.series.forEach((s, j) => { const v = s.v[i]; if (!isFinite(v)) { dots[j].setAttribute('visibility', 'hidden'); return; } dots[j].setAttribute('cx', x(o.xs[i])); dots[j].setAttribute('cy', clamp(y(v), plot.y0, plot.y1)); dots[j].setAttribute('visibility', 'visible'); });
-      return { title: o.tipX(o.xs[i]), rows: o.series.map(s => ({ value: isFinite(s.v[i]) ? o.fmt(s.v[i]) : '–', label: s.label, color: col('--' + s.cls) })), y: (plot.y0 + plot.y1) / 2 };
+      o.series.forEach((s, j) => { const v = s.v[i]; if (v == null || !isFinite(v)) { dots[j].setAttribute('visibility', 'hidden'); return; } dots[j].setAttribute('cx', x(o.xs[i])); dots[j].setAttribute('cy', clamp(y(v), plot.y0, plot.y1)); dots[j].setAttribute('visibility', 'visible'); });
+      return { title: o.tipX(o.xs[i]), rows: o.series.map(s => ({ value: s.v[i] != null && isFinite(s.v[i]) ? o.fmt(s.v[i]) : '–', label: s.label, color: col('--' + s.cls) })), y: (plot.y0 + plot.y1) / 2 };
     }, { onClear: () => dots.forEach(d => d.setAttribute('visibility', 'hidden')), focusIndex: Math.floor(o.xs.length / 2) });
     if (o.table && o.series.every(s => s.v.length === o.xs.length)) fillTable(fig, o.table.head, o.table.rows());
   }
@@ -2259,16 +2279,17 @@ LIVE.on(d => {
   if (!d) return;
   $('mkt').hidden = false; liveStatus($('mktStatus'), $('mktAsof'), d);
   const row = $('mktRow'), e0 = d.expiries[0];
-  const tile = (l, v, c) => { const t = document.createElement('div'); t.className = 'tk'; const a = document.createElement('div'); a.className = 'l'; a.textContent = l; const b = document.createElement('div'); b.className = 'v'; b.textContent = v; t.append(a, b); if (c) t.append(c); row.append(t); };
-  tile('S&P 500', num(d.spot.level), chgSpan(d.spot.change_pct, 2, ' %'));
-  for (const k of ['VIX1D', 'VIX9D', 'VIX', 'VIX3M', 'VVIX']) if (d.vix[k]) tile(k, num(d.vix[k].level), chgSpan(d.vix[k].change));
-  if (e0 && e0.rep_move) { const c = document.createElement('div'); c.className = 'c'; c.style.color = 'var(--text3)'; c.textContent = 'to ' + fmtExp(e0.expiry); tile('Implied move', '±' + (e0.rep_move * 100).toFixed(2) + ' %', c); }
+  const tile = (l, v, c, key) => { const t = document.createElement('button'); t.type = 'button'; t.className = 'tk'; t.title = 'Show history & live chart'; t.addEventListener('click', () => { HL_SEL = key; if (window.__hlSet) window.__hlSet(key); go('live', 'hl'); }); const a = document.createElement('div'); a.className = 'l'; a.textContent = l; const b = document.createElement('div'); b.className = 'v'; b.textContent = v; t.append(a, b); if (c) t.append(c); row.append(t); };
+  tile('S&P 500', num(d.spot.level), chgSpan(d.spot.change_pct, 2, ' %'), 'SPX');
+  for (const k of ['VIX1D', 'VIX9D', 'VIX', 'VIX3M', 'VVIX']) if (d.vix[k]) tile(k, num(d.vix[k].level), chgSpan(d.vix[k].change), k);
+  if (e0 && e0.rep_move) { const c = document.createElement('div'); c.className = 'c'; c.style.color = 'var(--text3)'; c.textContent = 'to ' + fmtExp(e0.expiry); tile('Implied move', '±' + (e0.rep_move * 100).toFixed(2) + ' %', c, 'move'); }
 });
 
 /* ---------- live market tab ---------- */
 INITS.live = () => LIVE.on(d => {
   if (!d) { $('lvEmpty').hidden = false; $('lvBody').hidden = true; $('lvStatus').textContent = 'unavailable'; return; }
   liveStatus($('lvStatus'), $('lvAsof'), d);
+  initHL(d);
   const S0 = d.spot.level, E = d.expiries, e0 = E[0], byDate = Object.fromEntries(E.map(e => [e.expiry, e]));
   const sviW = (p, k) => p[0] + p[1] * (p[2] * (k - p[3]) + Math.sqrt((k - p[3]) ** 2 + p[4] * p[4]));
   // stats
@@ -2353,7 +2374,7 @@ INITS.live = () => LIVE.on(d => {
   drawCurve();
 
   // VIX history
-  const H = d.history, hx = H.dates.map((_, i) => i), mon = i => new Date(H.dates[i] + 'T12:00:00Z').toLocaleDateString('en-US', { month: 'short', timeZone: 'UTC' });
+  const H0 = d.history, cut = Math.max(0, H0.dates.length - 250), H = Object.fromEntries(Object.entries(H0).map(([k, v]) => [k, v.slice(cut)])), hx = H.dates.map((_, i) => i), mon = i => new Date(H.dates[i] + 'T12:00:00Z').toLocaleDateString('en-US', { month: 'short', timeZone: 'UTC' });
   const hist = lineChart('figLvHist', { xs: hx, series: [['VIX1D', 's1'], ['VIX9D', 's2'], ['VIX', 's3'], ['VIX3M', 's4']].map(([k, c]) => ({ v: H[k], cls: c, label: k, thin: k === 'VIX1D' })), xTitle: '', xFmt: i => mon(Math.round(i)), tipX: i => H.dates[i], fmt: v => v.toFixed(2), height: 220, m: { l: 36, b: 26 },
     table: { head: ['Date', 'VIX1D', 'VIX9D', 'VIX', 'VIX3M'], rows: () => H.dates.map((dd, i) => [dd, H.VIX1D[i], H.VIX9D[i], H.VIX[i], H.VIX3M[i]]).slice(-60).reverse() } });
   hist.redraw();
@@ -2405,6 +2426,119 @@ INITS.live = () => LIVE.on(d => {
   const et = $('lvExpTable').tBodies[0];
   E.forEach(e => { const tr = et.insertRow(); [e.expiry, e.settle, e.days, num(e.F), e.days >= 30 && e.parity_ok ? (e.r * 100).toFixed(2) + ' %' : '–', e.days >= 30 && e.parity_ok ? (e.q * 100).toFixed(2) + ' %' : '–', (e.atm_iv * 100).toFixed(2) + ' %', e.rep_move ? '±' + (e.rep_move * 100).toFixed(2) + ' %' : '–', '±' + (e.straddle_move * 100).toFixed(2) + ' %', (e.fit_rmse * 100).toFixed(2), Math.round(e.fit_inside * 100) + ' %', e.butterfly_ok ? 'ok' : 'flag'].forEach((v, i) => { const td = tr.insertCell(); td.textContent = v; if (i >= 2 && i <= 10) td.className = 'num'; }); });
 });
+
+/* ---------- history & live chart: Cboe daily closes + intraday snapshots + live point ---------- */
+let HL_SEL = 'VIX';
+const HL_SERIES = [
+  { k: 'SPX', n: 'S&P 500', f: v => num(v, 2) }, { k: 'VIX1D', n: 'VIX1D', f: v => v.toFixed(2) }, { k: 'VIX9D', n: 'VIX9D', f: v => v.toFixed(2) },
+  { k: 'VIX', n: 'VIX', f: v => v.toFixed(2) }, { k: 'VIX3M', n: 'VIX3M', f: v => v.toFixed(2) }, { k: 'VVIX', n: 'VVIX', f: v => v.toFixed(2) },
+  { k: 'move', n: 'Implied move', long: 'Model-free implied move to the next expiry', f: v => '±' + v.toFixed(2) + ' %', mine: true },
+  { k: 'v30', n: '30-day vol (mine)', long: '30-day model-free implied vol, my replication from the chain', f: v => v.toFixed(2) + ' %', mine: true },
+  { k: 'zg', n: 'Zero gamma', long: 'Zero-gamma level of SPX under convention A', f: v => num(v, 0), mine: true },
+];
+const HL_RANGES = [['1D', 'intraday'], ['5D', 'intraday'], ['1M', 21], ['6M', 126], ['1Y', 252], ['5Y', 1260]];
+const fin = v => typeof v === 'number' && isFinite(v);
+function initHL(d) {
+  const fig = $('figLvHL'), host = chart(fig, draw), chips = $('hlSer'), seg = $('hlRng');
+  let rng = '1M';
+  HL_SERIES.forEach(s => { const b = document.createElement('button'); b.type = 'button'; b.className = 'chip-btn'; b.dataset.p = s.k; b.textContent = s.n; if (s.k === HL_SEL) b.setAttribute('aria-pressed', 'true'); chips.append(b); });
+  chipGroup(chips, k => { HL_SEL = k; draw(); });
+  HL_RANGES.forEach(([r]) => { const b = document.createElement('button'); b.type = 'button'; b.dataset.v = r; b.textContent = r; if (r === rng) b.setAttribute('aria-pressed', 'true'); seg.append(b); });
+  segmented('hlRng', r => { rng = r; draw(); });
+  window.__hlSet = k => { HL_SEL = k; chips.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.p === k))); draw(); };
+
+  const H = d.history, A = d.archive || [], I = d.intraday || [];
+  const openNow = marketOpenNow(), lastI = I[I.length - 1];
+  const isLive = !!lastI && openNow && (Date.now() - new Date(d.meta.generated_utc)) / 6e4 <= 75;
+  const dayOf = t => t.slice(0, 10);
+  const daily = k => {            // [{d, v}] — Cboe history for index series, my archive for derived ones
+    const SM = HL_SERIES.find(s => s.k === k);
+    const rows = SM.mine ? A.map(r => ({ d: r.d, v: r[k] })) : H.dates.map((dd, i) => ({ d: dd, v: H[k] ? H[k][i] : null }));
+    return rows.filter(r => fin(r.v));
+  };
+  function series(k) {
+    const SM = HL_SERIES.find(s => s.k === k), R = HL_RANGES.find(r => r[0] === rng)[1];
+    if (R === 'intraday') {
+      const days = [...new Set(I.map(r => dayOf(r.t)))], keep = rng === '1D' ? days.slice(-1) : days;
+      const pts = I.filter(r => keep.includes(dayOf(r.t)) && fin(r[k])).map(r => ({ t: r.t, d: dayOf(r.t), v: r[k] }));
+      // previous session's close: the later of the last intraday point of an earlier day and the daily close before today
+      const lastDay = days[days.length - 1], pd = [...daily(k)].reverse().find(r => r.d < lastDay);
+      const pi = I.filter(r => dayOf(r.t) < lastDay && fin(r[k])).pop();
+      let prev = pd ? pd.v : null; if (pi && (!pd || dayOf(pi.t) >= pd.d)) prev = pi[k];
+      return { SM, pts, intraday: true, prev };
+    }
+    const dl = daily(k).slice(-R).map(r => ({ d: r.d, v: r.v }));
+    // sessions newer than the last daily close: take each session's latest snapshot; the final one is the live value
+    const lastD = dl.length ? dl[dl.length - 1].d : '', newer = [...new Set(I.map(r => dayOf(r.t)))].filter(dd => dd > lastD);
+    newer.forEach((dd, j) => { const r = I.filter(x => dayOf(x.t) === dd && fin(x[k])).pop(); if (r) dl.push({ d: dd, t: r.t, v: r[k], live: j === newer.length - 1 }); });
+    const all = daily(k), prev = dl.length > 1 ? dl[dl.length - 2].v : null;
+    return { SM, pts: dl, intraday: false, prev, year: all.slice(-252).map(r => r.v) };
+  }
+  function draw() {
+    const { SM, pts, intraday, prev, year } = series(HL_SEL);
+    const cur = pts[pts.length - 1];
+    // header stats
+    $('hlName').textContent = SM.long || SM.n;
+    $('hlVal').textContent = cur ? SM.f(cur.v) : '–';
+    const tag = $('hlTag'); tag.className = 'status ' + (isLive && cur && (cur.live || intraday) ? 'live' : 'closed'); tag.innerHTML = '<i></i>';
+    tag.append(isLive && cur && (cur.live || intraday) ? 'Live · ' + fmtET(new Date(lastI.t), false) + ' ET' : cur ? 'Close · ' + fmtExp(cur.d) : 'no data');
+    const ch = $('hlChg'); ch.replaceChildren();
+    if (cur && fin(prev)) { const dv = cur.v - prev; ch.append(chgSpan(SM.k === 'SPX' ? dv / prev * 100 : dv, 2, SM.k === 'SPX' ? ' %' : (SM.k === 'move' || SM.k === 'v30' ? ' pts' : '')), document.createTextNode(' vs. previous session')); }
+    const pr = $('hlPct');
+    if (cur && year && year.length >= 200 && !SM.mine) { const below = year.filter(v => v < cur.v).length / year.length; pr.textContent = `${Math.round(below * 100)}th percentile of the past year`; }
+    else pr.textContent = SM.mine ? `my own measure · history since ${fmtExp((A[0] || { d: dayOf(lastI ? lastI.t : H.dates[H.dates.length - 1]) }).d)}, grows every session` : '';
+    // chart
+    const W = host.clientWidth || 700;
+    if (pts.length < 2) {
+      const base = chartBase(host, { height: 280, m: { l: 50 }, x: [0, 1], y: [0, 1], yTicks: false, xTicks: false, baseline: false });
+      txt(base.svg, W / 2, 130, intraday ? 'Intraday points build up with every 30-minute update during US trading hours.' : 'History for this series starts with the first archived session and grows daily.', 'lbl-svg', 'middle');
+      if (cur) txt(base.svg, W / 2, 156, `Latest: ${SM.f(cur.v)}${cur.t ? ' · ' + fmtET(new Date(cur.t)) + ' ET' : ' · ' + fmtExp(cur.d)}`, 'ann', 'middle');
+      fillTable(fig, ['Time', SM.n], pts.map(p => [p.t || p.d, SM.f(p.v)]));
+      $('hlRead').textContent = '';
+      return;
+    }
+    const vals = pts.map(p => p.v).concat(fin(prev) && intraday && rng === '1D' ? [prev] : []);
+    const base = chartBase(host, { height: 300, m: { l: SM.k === 'SPX' || SM.k === 'zg' ? 58 : 44, r: 64, b: 34 }, x: [0, pts.length - 1], y: niceDomain(Math.min(...vals), Math.max(...vals), 5), xTicks: false, baseline: false,
+      yFmt: v => SM.k === 'SPX' || SM.k === 'zg' ? num(v, 0) : v.toFixed(v % 1 ? 1 : 0) });
+    const { svg, x, y, plot } = base;
+    // x labels
+    const n = pts.length, want = Math.max(3, Math.min(7, Math.floor((plot.x1 - plot.x0) / 110)));
+    if (intraday) {
+      const segs = []; pts.forEach((p, i) => { if (!segs.length || segs[segs.length - 1].d !== p.d) segs.push({ d: p.d, a: i, b: i, t: p.t }); else segs[segs.length - 1].b = i; });
+      if (segs.length === 1) {
+        pts.forEach((p, i) => { if (i % Math.max(1, Math.round(n / want)) === 0) txt(svg, x(i), plot.y1 + 17, fmtET(new Date(p.t), false), 'tick', i === 0 ? 'start' : 'middle'); });
+      } else {
+        let lastLx = -1e9;   // one label per session, centred on its segment; skip if it would collide
+        segs.forEach((g, j) => {
+          if (j) S('line', { x1: x(g.a - 0.5), x2: x(g.a - 0.5), y1: plot.y0, y2: plot.y1, class: 'grid' }, svg);
+          const cx = x((g.a + g.b) / 2);
+          if (cx - lastLx >= 64) { txt(svg, cx, plot.y1 + 17, new Date(g.t).toLocaleDateString('en-US', { weekday: 'short', day: 'numeric', timeZone: ET }), 'tick', 'middle'); lastLx = cx; }
+        });
+      }
+    } else {
+      const step = Math.max(1, Math.round(n / want));
+      for (let i = 0; i < n; i += step) { const dd = new Date(pts[i].d + 'T12:00:00Z'); txt(svg, x(i), plot.y1 + 17, dd.toLocaleDateString('en-US', rng === '5Y' ? { month: 'short', year: 'numeric', timeZone: 'UTC' } : rng === '1M' ? { day: 'numeric', month: 'short', timeZone: 'UTC' } : { month: 'short', year: '2-digit', timeZone: 'UTC' }), 'tick', i === 0 ? 'start' : 'middle'); }
+    }
+    if (intraday && rng === '1D' && fin(prev)) { S('line', { x1: plot.x0, x2: plot.x1, y1: y(prev), y2: y(prev), class: 'marker', 'stroke-opacity': 0.5 }, svg); txt(svg, plot.x0 + 4, y(prev) - 6, 'previous close ' + SM.f(prev), 'ann'); }
+    const xs = pts.map((_, i) => i), ys = pts.map(p => p.v);
+    S('path', { d: linePath(xs, ys, x, y) + `L${x(n - 1)},${plot.y1}L${x(0)},${plot.y1}Z`, class: 'wash-s1' }, svg);
+    S('path', { d: linePath(xs, ys, x, y), class: 'ln ln-s1' }, svg);
+    const lx = x(n - 1), ly = y(cur.v), live = isLive && (cur.live || intraday);
+    if (live) S('circle', { cx: lx, cy: ly, r: 5, class: 'pulse-ring' }, svg);
+    S('circle', { cx: lx, cy: ly, r: 5, class: 'ring f-s1' }, svg);
+    txt(svg, lx + 9, ly + 4, SM.f(cur.v), 'lbl-strong');
+    txt(svg, lx + 9, ly + 18, live ? 'live' : 'close', 'ann');
+    const dot = S('circle', { r: 4, class: 'ring f-s1', visibility: 'hidden' }, svg);
+    interact(base, host, n, i => x(i), i => {
+      const p = pts[i]; dot.setAttribute('cx', x(i)); dot.setAttribute('cy', y(p.v)); dot.setAttribute('visibility', 'visible');
+      return { title: p.t ? fmtET(new Date(p.t)) + ' ET' + (p.live ? ' · live' : '') : fmtExp(p.d), rows: [{ value: SM.f(p.v), label: SM.n, color: col('--s1') }], y: y(p.v) };
+    }, { onClear: () => dot.setAttribute('visibility', 'hidden'), focusIndex: n - 1 });
+    const lo = Math.min(...ys), hi = Math.max(...ys);
+    $('hlRead').textContent = `${rng} range ${SM.f(lo)} – ${SM.f(hi)}. ${intraday ? 'Points are the 30-minute snapshots (Cboe, about 15 min delayed).' : 'Daily closes from Cboe' + (SM.mine ? ' (my end-of-day archive)' : '') + (pts[n - 1].live ? '; the last point is today’s live value.' : '.')}`;
+    fillTable(fig, [intraday ? 'Time (ET)' : 'Date', SM.n], pts.slice().reverse().map(p => [p.t ? fmtET(new Date(p.t)) : p.d, SM.f(p.v)]));
+  }
+  draw();
+}
 
 /* ---------- live hooks in the other tools ---------- */
 LIVE.on(d => {
