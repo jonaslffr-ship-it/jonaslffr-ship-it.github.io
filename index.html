@@ -71,12 +71,8 @@ strong{font-weight:600}
 .me{display:flex;align-items:center;gap:12px;padding:6px 10px 18px}
 .avatar{width:40px;height:40px;border-radius:50%;display:block;overflow:hidden;background:linear-gradient(135deg,#0a84ff,#5e5ce6);box-shadow:0 0 0 1px rgba(255,255,255,.14);flex:none}
 .avatar img{width:100%;height:100%;object-fit:cover;display:block}
-.hero-grid{display:grid;grid-template-columns:minmax(0,1fr) 290px;gap:44px;align-items:center}
-.hero-photo{margin:0;border-radius:var(--r-xl);overflow:hidden;aspect-ratio:3/4;background:var(--surface);box-shadow:0 0 0 1px rgba(255,255,255,.08),0 24px 60px rgba(0,0,0,.6)}
-.hero-photo img{width:100%;height:100%;object-fit:cover;object-position:46% 64%;display:block}
-.about-head{display:grid;grid-template-columns:260px minmax(0,1fr);gap:32px;align-items:center;margin-bottom:28px}
-.about-photo{margin:0;border-radius:var(--r-xl);overflow:hidden;aspect-ratio:4/5;background:var(--surface);box-shadow:0 0 0 1px rgba(255,255,255,.08),0 18px 44px rgba(0,0,0,.5)}
-.about-photo img{width:100%;height:100%;object-fit:cover;object-position:46% 62%;display:block}
+.avatar-lg{width:112px;height:112px;box-shadow:0 0 0 1px rgba(255,255,255,.14),0 12px 32px rgba(0,0,0,.5)}
+.about-head{display:grid;grid-template-columns:112px minmax(0,1fr);gap:28px;align-items:start;margin-bottom:26px}
 .me b{display:block;font-size:15px;line-height:1.2}
 .me span{font-size:12px;color:var(--text2)}
 .nav-h{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--text3);padding:14px 12px 6px}
@@ -245,7 +241,7 @@ tr:last-child td{border-bottom:0}
 
 /* ---------- content blocks ---------- */
 .hero{padding:10px 0 8px}
-.hero h1{font-size:clamp(34px,3.9vw,52px);max-width:980px;margin:6px 0 16px}
+.hero h1{font-size:clamp(34px,4.4vw,54px);max-width:980px;margin:6px 0 16px}
 .lead{font-size:19px;line-height:1.5;color:var(--text2);max-width:760px}
 .mkt{margin-top:26px;background:var(--surface);border-radius:var(--r);box-shadow:var(--ring);padding:14px 16px;max-width:1000px}
 .mkt-head{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;margin-bottom:10px}
@@ -321,8 +317,8 @@ footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--sep);font-siz
 footer p{max-width:860px}
 
 /* ---------- responsive ---------- */
-@media (max-width:1180px){ .tool{grid-template-columns:316px minmax(0,1fr)} .content{padding:30px 28px 72px} .hero-grid{grid-template-columns:1fr} .hero-photo{display:none} }
-@media (max-width:760px){ .about-head{grid-template-columns:1fr} .about-photo{aspect-ratio:16/11;max-height:380px} }
+@media (max-width:1180px){ .tool{grid-template-columns:316px minmax(0,1fr)} .content{padding:30px 28px 72px} }
+@media (max-width:560px){ .about-head{grid-template-columns:1fr;gap:16px} .avatar-lg{width:88px;height:88px} }
 @media (max-width:980px){
   .app{grid-template-columns:1fr}
   .rail{display:none}
@@ -366,18 +362,14 @@ footer p{max-width:860px}
 <!-- =============================== OVERVIEW =============================== -->
 <section class="view" id="v-overview" role="tabpanel" aria-label="Overview">
   <div class="hero">
-   <div class="hero-grid"><div>
     <p class="eyebrow">Quantitative research · Volatility &amp; options</p>
     <h1>I study volatility — how to forecast it, how options price it, and how to tell a real edge from an overfit one.</h1>
-    <p class="lead">I’m Jonas Löffler. In my bachelor’s thesis I forecast S&amp;P&nbsp;500 volatility on 21&nbsp;years of one-minute data. When I extended it into a pre-registered study, my best trading rule looked great — and was disqualified by my own overfitting test. Now I’m measuring how much the options market charges for a single trading day, from second-by-second 0DTE quotes since 2018.</p>
+    <p class="lead">I’m Jonas Löffler. I forecast volatility, measure what option prices imply about it — and try hard to prove my own ideas wrong. Hypotheses and decision rules are written down before the first run, results are judged out of sample, and failures are published with the same care as successes. Right now I’m measuring how much the options market charges for a single trading day, and running a live SPX volatility dashboard that anyone can check.</p>
     <div class="btns" style="margin-top:22px">
       <button class="btn btn-fill" type="button" data-go="surface">Open the vol surface</button>
       <button class="btn" type="button" data-go="research">Read the research</button>
       <a class="btn" data-href="github" href="#" rel="me noopener">GitHub</a>
     </div>
-   </div>
-   <figure class="hero-photo"><picture><source srcset="assets/profile.webp" type="image/webp"><img src="assets/profile.jpg" alt="Jonas Löffler walking between office towers" width="600" height="1037" decoding="async" fetchpriority="high"></picture></figure>
-   </div>
     <div class="mkt" id="mkt" hidden>
       <div class="mkt-head"><span class="status" id="mktStatus"><i></i>…</span><span class="tiny" id="mktAsof"></span><button class="btn btn-s btn-tonal" type="button" data-go="live">Open live market →</button></div>
       <div class="mkt-row" id="mktRow"></div>
@@ -967,11 +959,11 @@ footer p{max-width:860px}
 <!-- =============================== ABOUT =============================== -->
 <section class="view" id="v-about" role="tabpanel" aria-label="About" hidden>
   <div class="about-head">
-  <figure class="about-photo"><picture><source srcset="assets/profile.webp" type="image/webp"><img src="assets/profile.jpg" alt="Jonas Löffler" width="600" height="1037" decoding="async" loading="lazy"></picture></figure>
+  <picture class="avatar avatar-lg"><source srcset="assets/avatar.webp" type="image/webp"><img src="assets/avatar.jpg" alt="Jonas Löffler" width="112" height="112" decoding="async"></picture>
   <div class="v-head" style="margin:0">
     <p class="eyebrow">About</p>
     <h1>Jonas Löffler</h1>
-    <p class="sub">Based in Germany. I wrote my bachelor’s thesis on realized-volatility forecasting for the S&amp;P&nbsp;500 and have kept extending it — into pre-registered forecasting research, options-implied measures and the mechanics of dealer hedging. What I care about most is knowing which results are real.</p>
+    <p class="sub">Based in Germany. I work on volatility from three sides: forecasting it from high-frequency data, reading it from option prices — surfaces, model-free implied variance, dealer positioning — and testing trading ideas without fooling myself. What I care about most is knowing which results are real.</p>
     <p class="sub" style="margin-top:12px" data-text="lookingFor"></p>
   </div>
   </div>
@@ -982,7 +974,16 @@ footer p{max-width:860px}
     <a class="btn" data-href="orcid" href="#" rel="me noopener">ORCID</a>
     <a class="btn btn-fill" data-href="cv" href="#">CV (PDF)</a>
   </div>
-  <h2 style="margin-top:0">Toolkit</h2>
+  <h2 style="margin-top:0">How I work</h2>
+  <ol class="rules" style="margin-bottom:8px">
+    <li><b>One question first.</b><span>Every project starts as a single falsifiable question with an expected effect size — not as a search for a good backtest.</span></li>
+    <li><b>Commit before I look.</b><span>Hypotheses, sample splits, costs and kill rules go into a pre-registration before the first run; the commit timestamp is the proof.</span></li>
+    <li><b>Test it like it’s wrong.</b><span>Out-of-sample or walk-forward only, every trial counted, estimators checked against a known answer before they touch real data.</span></li>
+    <li><b>Publish all of it.</b><span>Code that reproduces from a clean clone, negative results included, corrections logged as errata instead of silent edits.</span></li>
+  </ol>
+  <p class="fn" style="margin-bottom:0">The full rules are in the <a href="#standards" data-go="research#standards">research standards</a>.</p>
+
+  <h2>Toolkit</h2>
   <div class="kv">
     <div><b>Forecasting</b><span>HAR, log-HAR, HAR-IV; realized measures (RV, bipower variation, semivariances, jumps); range estimators</span></div>
     <div><b>Forecast evaluation</b><span>QLIKE, Diebold–Mariano, Clark–West, Model Confidence Set, Mincer–Zarnowitz</span></div>

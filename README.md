@@ -20,7 +20,7 @@ A single, dependency-free `index.html` (no build step): a dark-mode app with tab
 | Backtest Lab | CSCV / probability of backtest overfitting and the deflated Sharpe ratio; bar-touch vs. tick-level fills on a random walk |
 | Research · About | Working-paper results (forecast ladder, Sharpe intervals), Research 2 design, research standards, toolkit, teaching |
 
-Images in `assets/`: profile photo (`profile.jpg/.webp`, re-encoded without metadata), avatar crop (`avatar.jpg/.webp`) and the social preview card `og.jpg` (1200×630, used by LinkedIn/WhatsApp/X link previews).
+Images in `assets/`: profile picture (`avatar.jpg/.webp`, re-encoded without metadata) and the social preview card `og.jpg` (1200×630, used by LinkedIn/WhatsApp/X link previews).
 
 Deep links: `#surface`, `#greeks`, `#dealer` (alias `#lab`), `#odte`, `#realized`, `#backtest`, `#research`, `#f1`, `#f2`, `#standards`, `#about`.
 
