@@ -677,7 +677,7 @@ footer p{max-width:860px}
   </div>
   <div class="tool">
     <aside class="panel" aria-label="Strategy controls">
-      <div><p class="group-t">Strategy</p><div class="chips" id="gkPre"></div></div>
+      <div><p class="group-t">Strategy</p><div class="group"><div class="row"><select id="gkStrat" aria-label="Strategy"></select><p class="hint" id="gkDesc" style="margin-top:8px"></p></div></div><p class="tiny" style="margin:8px 14px 0">30 strategies in seven groups; edit any leg below and the position becomes “custom”.</p></div>
       <div><p class="group-t">Legs</p><div class="group">
         <div class="leg-h" aria-hidden="true"><span>Side</span><span>Type</span><span>Strike</span><span>Qty</span><span>DTE</span><span></span></div>
         <div class="legs" id="gkLegs"></div>
@@ -1968,40 +1968,78 @@ INITS.greeks = () => {
     veta: { n: 'Veta', u: '$ vega per day', k: 0.01 / 365 }, speed: { n: 'Speed', u: 'Γ per $1', k: 1 }, zomma: { n: 'Zomma', u: 'Γ per vol pt', k: 0.01 },
     color: { n: 'Color', u: 'Γ per day', k: 1 / 365 }, ultima: { n: 'Ultima', u: '$ vomma per vol pt', k: 1e-6 },
   };
-  const PRESETS = {
-    'Long call': [[1, 'C', 100, 1, 30]], 'Long put': [[1, 'P', 100, 1, 30]], 'Straddle': [[1, 'C', 100, 1, 30], [1, 'P', 100, 1, 30]],
-    'Short strangle': [[-1, 'P', 90, 1, 30], [-1, 'C', 110, 1, 30]], 'Bull call spread': [[1, 'C', 100, 1, 30], [-1, 'C', 110, 1, 30]],
-    'Iron condor': [[1, 'P', 85, 1, 30], [-1, 'P', 92, 1, 30], [-1, 'C', 108, 1, 30], [1, 'C', 115, 1, 30]],
-    'Butterfly': [[1, 'C', 95, 1, 30], [-1, 'C', 100, 2, 30], [1, 'C', 105, 1, 30]], 'Risk reversal': [[-1, 'P', 92, 1, 30], [1, 'C', 108, 1, 30]],
-    'Calendar': [[-1, 'C', 100, 1, 30], [1, 'C', 100, 1, 90]], '0DTE straddle': [[1, 'C', 100, 1, 1], [1, 'P', 100, 1, 1]],
-  };
-  const pre = $('gkPre'); Object.keys(PRESETS).forEach((k, i) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'chip-btn'; b.dataset.p = k; b.textContent = k; if (i === 2) b.setAttribute('aria-pressed', 'true'); pre.appendChild(b); });
+  const STRATS = [
+    ['Directional', 'Long call', [[1, 'C', 100, 1, 30]], 'Bullish with limited risk: the premium is the maximum loss.'],
+    ['Directional', 'Long put', [[1, 'P', 100, 1, 30]], 'Bearish or protective, with limited risk.'],
+    ['Directional', 'Bull call spread', [[1, 'C', 100, 1, 30], [-1, 'C', 110, 1, 30]], 'Long call financed by a higher short call; profit capped at the spread width.'],
+    ['Directional', 'Bear put spread', [[1, 'P', 100, 1, 30], [-1, 'P', 90, 1, 30]], 'Bearish debit spread with defined risk and reward.'],
+    ['Directional', 'Bull put spread', [[-1, 'P', 95, 1, 30], [1, 'P', 90, 1, 30]], 'Bullish credit spread: keeps the premium while spot stays above the short put.'],
+    ['Directional', 'Bear call spread', [[-1, 'C', 105, 1, 30], [1, 'C', 110, 1, 30]], 'Bearish credit spread: keeps the premium while spot stays below the short call.'],
+    ['Directional', 'Risk reversal', [[-1, 'P', 92, 1, 30], [1, 'C', 108, 1, 30]], 'Short put pays for a long call: synthetic long exposure that lives on the skew.'],
+    ['Stock + options', 'Covered call', [[1, 'U', 0, 1, 0], [-1, 'C', 105, 1, 30]], 'Long 100 shares plus a short call: income now, upside capped at the strike.'],
+    ['Stock + options', 'Protective put', [[1, 'U', 0, 1, 0], [1, 'P', 95, 1, 30]], 'Long 100 shares insured by a put: a floor below the strike.'],
+    ['Stock + options', 'Collar', [[1, 'U', 0, 1, 0], [1, 'P', 95, 1, 30], [-1, 'C', 105, 1, 30]], 'Shares hedged with a put that a short call pays for: floor and cap.'],
+    ['Volatility', 'Long straddle', [[1, 'C', 100, 1, 30], [1, 'P', 100, 1, 30]], 'Long volatility: needs a move larger than the premium in either direction; theta is the rent.'],
+    ['Volatility', 'Long strangle', [[1, 'P', 95, 1, 30], [1, 'C', 105, 1, 30]], 'Cheaper long-vol bet with out-of-the-money options; needs a bigger move.'],
+    ['Volatility', 'Short straddle', [[-1, 'C', 100, 1, 30], [-1, 'P', 100, 1, 30]], 'Short volatility: earns if spot stays near the strike; unlimited risk both ways.'],
+    ['Volatility', 'Short strangle', [[-1, 'P', 90, 1, 30], [-1, 'C', 110, 1, 30]], 'Short vol with a wider profit zone; losses unbounded beyond the strikes.'],
+    ['Volatility', 'Iron condor', [[1, 'P', 85, 1, 30], [-1, 'P', 92, 1, 30], [-1, 'C', 108, 1, 30], [1, 'C', 115, 1, 30]], 'Short strangle with protective wings: a defined-risk range trade.'],
+    ['Volatility', 'Iron butterfly', [[1, 'P', 90, 1, 30], [-1, 'P', 100, 1, 30], [-1, 'C', 100, 1, 30], [1, 'C', 110, 1, 30]], 'Short straddle with wings: bigger credit, narrower profit zone, defined risk.'],
+    ['Butterflies & condors', 'Long call butterfly', [[1, 'C', 95, 1, 30], [-1, 'C', 100, 2, 30], [1, 'C', 105, 1, 30]], 'Cheap bet on spot finishing at the middle strike; defined risk.'],
+    ['Butterflies & condors', 'Broken-wing butterfly (call)', [[1, 'C', 100, 1, 30], [-1, 'C', 105, 2, 30], [1, 'C', 112, 1, 30]], 'Upper wing pushed out: cheaper or even a credit — risk only if spot runs far above the short strike.'],
+    ['Butterflies & condors', 'Broken-wing butterfly (put)', [[1, 'P', 100, 1, 30], [-1, 'P', 95, 2, 30], [1, 'P', 88, 1, 30]], 'Lower wing pushed out: often opened for a credit, no loss on a rally — the risk sits in a deep sell-off.'],
+    ['Butterflies & condors', 'Call condor', [[1, 'C', 95, 1, 30], [-1, 'C', 100, 1, 30], [-1, 'C', 105, 1, 30], [1, 'C', 110, 1, 30]], 'Butterfly with a flat top: a wider profit zone between the short strikes.'],
+    ['Ratios & skew', 'Call ratio spread', [[1, 'C', 100, 1, 30], [-1, 'C', 107, 2, 30]], 'Long one call, short two higher: cheap upside to the short strike, open risk above it.'],
+    ['Ratios & skew', 'Put backspread', [[-1, 'P', 100, 1, 30], [1, 'P', 93, 2, 30]], 'Short one put, long two lower: crash protection that can cost nothing — loses in a slow drift lower.'],
+    ['Ratios & skew', 'Jade lizard', [[-1, 'P', 98, 1, 30], [-1, 'C', 103, 1, 30], [1, 'C', 104, 1, 30]], 'Short put plus short call spread; if the credit exceeds the call-spread width there is no upside risk.'],
+    ['Ratios & skew', 'Christmas tree (call)', [[1, 'C', 100, 1, 30], [-1, 'C', 105, 1, 30], [-1, 'C', 110, 1, 30]], 'Long call with two short calls at stepped strikes: cheap, bullish up to a target.'],
+    ['Time spreads', 'Calendar', [[-1, 'C', 100, 1, 30], [1, 'C', 100, 1, 90]], 'Short front month, long back month, same strike: earns the faster front decay, long vega.'],
+    ['Time spreads', 'Diagonal', [[-1, 'C', 105, 1, 30], [1, 'C', 100, 1, 90]], 'Calendar across strikes: term-structure exposure plus a directional tilt.'],
+    ['Time spreads', 'Double calendar', [[-1, 'P', 95, 1, 30], [1, 'P', 95, 1, 90], [-1, 'C', 105, 1, 30], [1, 'C', 105, 1, 90]], 'Two calendars around spot: a wider profit zone, long vega.'],
+    ['0DTE', '0DTE straddle', [[1, 'C', 100, 1, 1], [1, 'P', 100, 1, 1]], 'Long gamma for one session: pays if the realized move beats the implied move.'],
+    ['0DTE', '0DTE iron condor', [[1, 'P', 97, 1, 1], [-1, 'P', 98.5, 1, 1], [-1, 'C', 101.5, 1, 1], [1, 'C', 103, 1, 1]], 'Same-day range trade: small credit, violent gamma near the short strikes.'],
+    ['0DTE', '0DTE butterfly', [[1, 'C', 99, 1, 1], [-1, 'C', 100, 2, 1], [1, 'C', 101, 1, 1]], 'Lottery ticket on the close: tiny debit, large payoff if the close pins the middle strike.'],
+  ];
+  const stratSel = $('gkStrat');
+  { const c = document.createElement('option'); c.value = ''; c.textContent = 'Custom position'; stratSel.append(c); let og = null;
+    STRATS.forEach(([g, n]) => { if (!og || og.label !== g) { og = document.createElement('optgroup'); og.label = g; stratSel.append(og); } const o = document.createElement('option'); o.value = n; o.textContent = n; og.append(o); }); }
   const zSel = $('gkZ'); Object.entries(META).forEach(([k, m]) => { const o = document.createElement('option'); o.value = k; o.textContent = m.n + (k === 'pnl' ? '' : ' · ' + m.u); zSel.appendChild(o); });
   const S_ = range('gkS', v => v.toFixed(1)), V_ = range('gkV', v => v + ' %'), R_ = range('gkR', v => v.toFixed(2) + ' %'), Q_ = range('gkQ', v => v.toFixed(1) + ' %'), T_ = range('gkT', v => v + ' d');
   const yAxis = segmented('gkY', () => upd());
   const s3 = new Surface3D($('gkStage'), { yaw: -0.5, pitch: 0.45 }); document.querySelector('[data-reset="gkStage"]')._s3d = s3;
   let legs = [];
   const mk = () => ({ r: R_.value / 100, q: Q_.value / 100 });
-  const price = l => bsAll(S_REF, l.K, V_.value / 100, l.dte / 365, mk().r, mk().q, l.type === 'C').price;
+  const price = l => l.type === 'U' ? S_REF : bsAll(S_REF, l.K, V_.value / 100, l.dte / 365, mk().r, mk().q, l.type === 'C').price;
+  const optLegs = () => legs.filter(l => l.type !== 'U');
   const setLegs = arr => { legs = arr.map(([side, type, K, qty, dte]) => { const l = { side, type, K, qty, dte }; l.prem = price(l); return l; }); renderLegs(); };
-  const clearPre = chipGroup(pre, k => setLegs(PRESETS[k]));
+  const pick = n => { const s = STRATS.find(x => x[1] === n); if (!s) return; stratSel.value = n; $('gkDesc').textContent = s[3]; setLegs(s[2]); };
+  stratSel.addEventListener('change', () => { if (stratSel.value) pick(stratSel.value); });
+  const clearPre = () => { stratSel.value = ''; $('gkDesc').textContent = 'Custom position — edit the legs below.'; };
   function renderLegs() {
     const box = $('gkLegs'); box.replaceChildren();
     legs.forEach((l, idx) => {
       const row = document.createElement('div'); row.className = 'leg';
-      row.innerHTML = `<select aria-label="Side"><option value="1">Long</option><option value="-1">Short</option></select><select aria-label="Type"><option value="C">Call</option><option value="P">Put</option></select><input type="number" aria-label="Strike" min="1" step="1"><input type="number" aria-label="Quantity" min="1" step="1"><input type="number" aria-label="Days to expiry" min="1" max="730" step="1"><button class="del" type="button" aria-label="Remove leg">×</button>`;
+      row.innerHTML = `<select aria-label="Side"><option value="1">Long</option><option value="-1">Short</option></select><select aria-label="Type"><option value="C">Call</option><option value="P">Put</option><option value="U">Underlying</option></select><input type="number" aria-label="Strike" min="1" step="1"><input type="number" aria-label="Quantity" min="1" step="1"><input type="number" aria-label="Days to expiry" min="1" max="730" step="1"><button class="del" type="button" aria-label="Remove leg">×</button>`;
       const [side, type, K, qty, dte, del] = row.children;
       side.value = String(l.side); type.value = l.type; K.value = l.K; qty.value = l.qty; dte.value = l.dte;
-      const ch = () => { l.side = +side.value; l.type = type.value; l.K = Math.max(1, +K.value || 100); l.qty = Math.max(1, Math.round(+qty.value || 1)); l.dte = clamp(Math.round(+dte.value || 30), 1, 730); l.prem = price(l); clearPre(); upd(); };
+      if (l.type === 'U') { K.disabled = dte.disabled = true; K.value = ''; dte.value = ''; K.placeholder = dte.placeholder = '—'; K.title = dte.title = '100 shares at the entry price 100'; }
+      const ch = () => {
+        const wasU = l.type === 'U';
+        l.side = +side.value; l.type = type.value; l.qty = Math.max(1, Math.round(+qty.value || 1));
+        if (l.type === 'U') { l.K = 0; l.dte = 0; }
+        else if (wasU) { l.K = 100; l.dte = 30; }
+        else { l.K = Math.max(1, +K.value || 100); l.dte = clamp(Math.round(+dte.value || 30), 1, 730); }
+        l.prem = price(l); clearPre(); renderLegs();
+      };
       [side, type, K, qty, dte].forEach(e => e.addEventListener('change', ch));
       del.addEventListener('click', () => { legs.splice(idx, 1); clearPre(); renderLegs(); });
       box.appendChild(row);
     });
-    const maxD = Math.max(1, ...legs.map(l => l.dte)); T_.max = maxD; if (+T_.value > maxD) T_.value = maxD; T_._upd();
+    const maxD = Math.max(1, ...optLegs().map(l => l.dte)); T_.max = maxD; if (+T_.value > maxD) T_.value = maxD; T_._upd();
     upd();
   }
   $('gkAdd').addEventListener('click', () => { const l = { side: 1, type: 'C', K: 100, qty: 1, dte: 30 }; l.prem = price(l); legs.push(l); clearPre(); renderLegs(); });
-  const val = (S, sig, t, key) => { let v = 0; const { r, q } = mk(); for (const l of legs) { const T = Math.max(l.dte - t, 0) / 365, g = bsAll(S, l.K, sig, T, r, q, l.type === 'C'); v += l.side * l.qty * MULT * (key === 'pnl' ? g.price - l.prem : g[key] * META[key].k); } return v; };
+  const val = (S, sig, t, key) => { let v = 0; const { r, q } = mk(); for (const l of legs) { if (l.type === 'U') { v += l.side * l.qty * MULT * (key === 'pnl' ? S - l.prem : key === 'delta' ? 1 : 0); continue; } const T = Math.max(l.dte - t, 0) / 365, g = bsAll(S, l.K, sig, T, r, q, l.type === 'C'); v += l.side * l.qty * MULT * (key === 'pnl' ? g.price - l.prem : g[key] * META[key].k); } return v; };
   const fmtV = (v, key) => key === 'pnl' ? money(v) : fmtSig(v, 4);
   const payX = Array.from({ length: 161 }, (_, i) => 60 + i * 0.5);
   const pay = lineChart('figPayoff', { xs: payX, series: [{ v: [], cls: 's1', label: 'now' }, { v: [], cls: 's2', label: 'at first expiry' }], xTitle: 'Spot', yFmt: v => minus(Math.round(v).toLocaleString('en-US')), tipX: x => 'Spot ' + x.toFixed(1), fmt: v => money(v), height: 240, m: { l: 58 }, baseline: 0,
@@ -2010,7 +2048,7 @@ INITS.greeks = () => {
   function upd() {
     if (!legs.length) { s3.set(null); $('gkPrem').textContent = '–'; return; }
     const sig = V_.value / 100, t = +T_.value, S0 = +S_.value, key = zSel.value, yv = yAxis(), { r, q } = mk();
-    const first = Math.min(...legs.map(l => l.dte));
+    const first = optLegs().length ? Math.min(...optLegs().map(l => l.dte)) : 0;
     const prem = legs.reduce((a, l) => a + l.side * l.qty * MULT * l.prem, 0);
     $('gkPrem').textContent = money(Math.abs(prem)); $('gkPremS').textContent = prem >= 0 ? 'debit (you pay)' : 'credit (you receive)';
     $('gkPnl').textContent = money(val(S0, sig, t, 'pnl'));
@@ -2023,7 +2061,7 @@ INITS.greeks = () => {
     $('gkBe').textContent = be.length ? be.slice(0, 3).map(b => b.toFixed(1)).join(' · ') : 'none';
     // 3D
     const NX = 41, NY = 31, xs = Float64Array.from({ length: NX }, (_, i) => 60 + i * 2);
-    const ys = yv === 'iv' ? Float64Array.from({ length: NY }, (_, j) => 5 + j * 75 / (NY - 1)) : Float64Array.from({ length: NY }, (_, j) => j * Math.max(...legs.map(l => l.dte)) / (NY - 1));
+    const ys = yv === 'iv' ? Float64Array.from({ length: NY }, (_, j) => 5 + j * 75 / (NY - 1)) : Float64Array.from({ length: NY }, (_, j) => j * Math.max(1, ...optLegs().map(l => l.dte)) / (NY - 1));
     const z = new Float64Array(NX * NY);
     for (let j = 0; j < NY; j++) for (let i = 0; i < NX; i++) z[j * NX + i] = yv === 'iv' ? val(xs[i], ys[j] / 100, t, key) : val(xs[i], sig, ys[j], key);
     const yT = yv === 'iv' ? [5, 20, 40, 60, 80].map(v => ({ v, t: v + '%' })) : ticks(0, ys[NY - 1], 4).map(v => ({ v, t: v + 'd' }));
@@ -2039,7 +2077,7 @@ INITS.greeks = () => {
     const tb = $('gkTable').tBodies[0]; tb.replaceChildren();
     for (const key2 of Object.keys(META).filter(k => k !== 'pnl')) {
       let worst = 0, live = 0;
-      for (const l of legs) {
+      for (const l of optLegs()) {
         const T = (l.dte - t) / 365; if (T <= 0) continue; live++;
         const a = bsAll(S0, l.K, sig, T, r, q, l.type === 'C')[key2], f = fdCheck(key2, S0, l.K, sig, T, r, q, l.type === 'C');
         let sc = 0; for (let s = 0.8 * S0; s <= 1.2 * S0 + 1e-9; s += 0.05 * S0) sc = Math.max(sc, Math.abs(bsAll(s, l.K, sig, T, r, q, l.type === 'C')[key2]));
@@ -2057,7 +2095,7 @@ INITS.greeks = () => {
   [S_, T_, R_, Q_].forEach(el => el.addEventListener('input', later));
   V_.addEventListener('input', later);
   zSel.addEventListener('change', upd);
-  setLegs(PRESETS['Straddle']);
+  pick('Long straddle');
 };
 
 /* =====================================================================
@@ -2643,6 +2681,12 @@ function initHL(d) {
     $('hlRead').textContent = SM.mine
       ? `Blue: my measure — ${pts.length} observation${pts.length === 1 ? '' : 's'} in this range (end-of-day archive since ${fmtExp((A[0] || { d: cur ? cur.d : '' }).d)} and 30-minute snapshots), growing every session. Grey: ${SM.ref.n}, the official comparison with full history.`
       : `${rng} range ${SM.f(Math.min(...mv))} – ${SM.f(Math.max(...mv))}. ${intra ? '5-minute bars from Cboe (about 15 minutes delayed) plus the latest snapshot.' : 'Daily closes from Cboe' + (axis[n - 1].newer ? '; the last point is the latest session’s value.' : '.')}`;
+    const nSess = new Set(axis.map(e => e.d)).size;
+    if (rng === '5D' && nSess < 5) {
+      const note = `${nSess} of 5 sessions collected so far — the 5-day view fills automatically with every trading day.`;
+      $('hlRead').textContent += ' ' + note;
+      txt(svg, plot.x0 + 8, plot.y0 + 14, note, 'ann');
+    }
     fillTable(fig, [intra ? 'Time (ET)' : 'Date', SM.mine ? 'My measure' : SM.n].concat(SM.ref ? [SM.ref.n] : []), axis.slice().reverse().filter(e => fin(e.v) || fin(e.r)).map(e => [intra ? e.d + ' ' + e.hm : e.d, fin(e.v) ? SM.f(e.v) : '–'].concat(SM.ref ? [fin(e.r) ? SM.ref.f(e.r) : '–'] : [])));
   }
   draw();
