@@ -442,6 +442,49 @@ def compile_archive(hdir: str) -> list:
              "v30": r.get("v30"), "zg": r.get("zero_gamma_A")} for r in out]
 
 
+CHARTS = "https://cdn.cboe.com/api/global/delayed_quotes/charts/intraday/_{}.json"
+BAR_SESSIONS = 5
+
+
+def fetch_bars() -> dict | None:
+    """Latest session's 1-minute bars for all six series from Cboe, sampled every 5 minutes on a fixed
+    09:35-16:00 ET grid (last non-zero close at or before each slot; the first vol-index bar is often 0)."""
+    slots = [f"{9 + (35 + 5 * i) // 60:02d}:{(35 + 5 * i) % 60:02d}" for i in range(78)]
+    out, day = {"t": slots}, None
+    for name in SERIES:
+        rows = json.loads(get(CHARTS.format(name)))["data"]
+        pts = sorted((r["datetime"][11:16], float(r["price"]["close"])) for r in rows if r.get("price") and r["price"].get("close"))
+        if not pts:
+            return None
+        day = day or rows[0]["datetime"][:10]
+        vals, j, last = [], 0, None
+        for sl in slots:
+            while j < len(pts) and pts[j][0] <= sl:
+                last = pts[j][1]; j += 1
+            vals.append(None if last is None else round(last, 2))
+        out[name] = vals
+    return {"date": day, **out}
+
+
+def update_bars(path: str) -> list:
+    sessions = []
+    if os.path.exists(path):
+        try:
+            sessions = json.load(open(path, encoding="utf-8"))
+        except (ValueError, OSError):
+            sessions = []
+    try:
+        cur = fetch_bars()
+    except Exception as e:  # keep the restored sessions if Cboe's chart endpoint hiccups
+        print("intraday bars unavailable:", e); cur = None
+    if cur:
+        sessions = [x for x in sessions if x["date"] != cur["date"]] + [cur]
+    sessions = sorted(sessions, key=lambda x: x["date"])[-BAR_SESSIONS:]
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(sessions, f, separators=(",", ":"))
+    return sessions
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default=os.path.join(os.path.dirname(__file__), "..", "data", "live"))
@@ -467,13 +510,14 @@ def main():
                 "v30": pt["v30"], "atm_term": [[e["days"], e["atm_iv"]] for e in snap["expiries"] if e["days"] <= 400]}
         with open(os.path.join(hdir, f"{day}.json"), "w", encoding="utf-8") as f: json.dump(summ, f, separators=(",", ":"))
     snap["intraday"] = update_intraday(os.path.join(a.out, "intraday.json"), snap)
+    snap["bars"] = update_bars(os.path.join(a.out, "bars.json"))
     snap["archive"] = compile_archive(hdir)
     body = json.dumps(snap, separators=(",", ":"), allow_nan=False)
     with open(os.path.join(a.out, "latest.json"), "w", encoding="utf-8") as f: f.write(body)
     with open(os.path.join(a.out, "latest.js"), "w", encoding="utf-8") as f: f.write("window.__LIVE__=" + body + ";" + chr(10))
     e0 = snap["expiries"][0] if snap["expiries"] else {}
     print(f"SPX {snap['spot']['level']:.2f} | expiries {len(snap['expiries'])} | next {e0.get('expiry')} move ±{(e0.get('rep_move') or 0)*100:.2f}% "
-          f"| zero-gamma(A) {snap['gex']['zero_gamma_A']} | intraday {len(snap['intraday'])} pts | archive {len(snap['archive'])} d | {len(body)/1024:.0f} KB")
+          f"| zero-gamma(A) {snap['gex']['zero_gamma_A']} | intraday {len(snap['intraday'])} pts | bars {len(snap['bars'])} sessions | archive {len(snap['archive'])} d | {len(body)/1024:.0f} KB")
 
 
 if __name__ == "__main__":

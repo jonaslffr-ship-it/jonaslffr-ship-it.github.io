@@ -460,6 +460,7 @@ footer p{max-width:860px}
       <div class="hl-top"><div class="chips" id="hlSer"></div><div class="seg" id="hlRng" role="group" aria-label="Time range"></div></div>
       <div class="hl-head"><div><p class="fn" id="hlName" style="margin:0">–</p><div class="hl-val" id="hlVal">–</div></div>
         <div class="hl-meta"><span class="status" id="hlTag"><i></i>–</span><span class="fn" id="hlChg"></span><span class="tiny" id="hlPct"></span></div></div>
+      <ul class="legend" id="hlLeg" hidden style="margin:2px 0 4px"></ul>
       <div class="chart" data-label="Chart of the selected series: daily history plus intraday snapshots and the live value."></div>
       <p class="read" id="hlRead"></p>
       <details class="tv"><summary>Data table</summary><div class="tbl"></div></details>
@@ -2427,115 +2428,148 @@ INITS.live = () => LIVE.on(d => {
   E.forEach(e => { const tr = et.insertRow(); [e.expiry, e.settle, e.days, num(e.F), e.days >= 30 && e.parity_ok ? (e.r * 100).toFixed(2) + ' %' : '–', e.days >= 30 && e.parity_ok ? (e.q * 100).toFixed(2) + ' %' : '–', (e.atm_iv * 100).toFixed(2) + ' %', e.rep_move ? '±' + (e.rep_move * 100).toFixed(2) + ' %' : '–', '±' + (e.straddle_move * 100).toFixed(2) + ' %', (e.fit_rmse * 100).toFixed(2), Math.round(e.fit_inside * 100) + ' %', e.butterfly_ok ? 'ok' : 'flag'].forEach((v, i) => { const td = tr.insertCell(); td.textContent = v; if (i >= 2 && i <= 10) td.className = 'num'; }); });
 });
 
-/* ---------- history & live chart: Cboe daily closes + intraday snapshots + live point ---------- */
+/* ---------- history & live chart ----------
+   Index series: Cboe daily closes (1M–5Y) and Cboe 5-minute bars (1D/5D) + the live snapshot.
+   My measures (implied move, 30-day vol, zero gamma): my archive + 30-minute snapshots in blue,
+   drawn over the official Cboe reference series (grey) that has full history. */
 let HL_SEL = 'VIX';
 const HL_SERIES = [
-  { k: 'SPX', n: 'S&P 500', f: v => num(v, 2) }, { k: 'VIX1D', n: 'VIX1D', f: v => v.toFixed(2) }, { k: 'VIX9D', n: 'VIX9D', f: v => v.toFixed(2) },
+  { k: 'SPX', n: 'S&P 500', f: v => num(v, 2), big: true },
+  { k: 'VIX1D', n: 'VIX1D', f: v => v.toFixed(2) }, { k: 'VIX9D', n: 'VIX9D', f: v => v.toFixed(2) },
   { k: 'VIX', n: 'VIX', f: v => v.toFixed(2) }, { k: 'VIX3M', n: 'VIX3M', f: v => v.toFixed(2) }, { k: 'VVIX', n: 'VVIX', f: v => v.toFixed(2) },
-  { k: 'move', n: 'Implied move', long: 'Model-free implied move to the next expiry', f: v => '±' + v.toFixed(2) + ' %', mine: true },
-  { k: 'v30', n: '30-day vol (mine)', long: '30-day model-free implied vol, my replication from the chain', f: v => v.toFixed(2) + ' %', mine: true },
-  { k: 'zg', n: 'Zero gamma', long: 'Zero-gamma level of SPX under convention A', f: v => num(v, 0), mine: true },
+  { k: 'move', n: 'Implied move', long: 'Model-free implied move to the next expiry — my measure', f: v => '±' + v.toFixed(2) + ' %', mine: true,
+    ref: { k: 'VIX1D', tf: v => v / Math.sqrt(252), n: 'VIX1D ÷ √252 — Cboe’s one-day move', f: v => '±' + v.toFixed(2) + ' %' } },
+  { k: 'v30', n: '30-day vol (mine)', long: '30-day model-free implied vol — my replication from the chain', f: v => v.toFixed(2) + ' %', mine: true,
+    ref: { k: 'VIX', tf: v => v, n: 'VIX — Cboe’s official 30-day index', f: v => v.toFixed(2) } },
+  { k: 'zg', n: 'Zero gamma', long: 'Zero-gamma level of SPX under convention A — my measure', f: v => num(v, 0), mine: true, big: true,
+    ref: { k: 'SPX', tf: v => v, n: 'S&P 500 spot', f: v => num(v, 2) } },
 ];
-const HL_RANGES = [['1D', 'intraday'], ['5D', 'intraday'], ['1M', 21], ['6M', 126], ['1Y', 252], ['5Y', 1260]];
+const HL_RANGES = [['1D', 1], ['5D', 5], ['1M', 21], ['6M', 126], ['1Y', 252], ['5Y', 1260]];
 const fin = v => typeof v === 'number' && isFinite(v);
 function initHL(d) {
   const fig = $('figLvHL'), host = chart(fig, draw), chips = $('hlSer'), seg = $('hlRng');
-  let rng = '1M';
+  let rng = '1D';
   HL_SERIES.forEach(s => { const b = document.createElement('button'); b.type = 'button'; b.className = 'chip-btn'; b.dataset.p = s.k; b.textContent = s.n; if (s.k === HL_SEL) b.setAttribute('aria-pressed', 'true'); chips.append(b); });
   chipGroup(chips, k => { HL_SEL = k; draw(); });
   HL_RANGES.forEach(([r]) => { const b = document.createElement('button'); b.type = 'button'; b.dataset.v = r; b.textContent = r; if (r === rng) b.setAttribute('aria-pressed', 'true'); seg.append(b); });
   segmented('hlRng', r => { rng = r; draw(); });
   window.__hlSet = k => { HL_SEL = k; chips.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.p === k))); draw(); };
 
-  const H = d.history, A = d.archive || [], I = d.intraday || [];
-  const openNow = marketOpenNow(), lastI = I[I.length - 1];
-  const isLive = !!lastI && openNow && (Date.now() - new Date(d.meta.generated_utc)) / 6e4 <= 75;
-  const dayOf = t => t.slice(0, 10);
-  const daily = k => {            // [{d, v}] — Cboe history for index series, my archive for derived ones
-    const SM = HL_SERIES.find(s => s.k === k);
-    const rows = SM.mine ? A.map(r => ({ d: r.d, v: r[k] })) : H.dates.map((dd, i) => ({ d: dd, v: H[k] ? H[k][i] : null }));
-    return rows.filter(r => fin(r.v));
-  };
-  function series(k) {
-    const SM = HL_SERIES.find(s => s.k === k), R = HL_RANGES.find(r => r[0] === rng)[1];
-    if (R === 'intraday') {
-      const days = [...new Set(I.map(r => dayOf(r.t)))], keep = rng === '1D' ? days.slice(-1) : days;
-      const pts = I.filter(r => keep.includes(dayOf(r.t)) && fin(r[k])).map(r => ({ t: r.t, d: dayOf(r.t), v: r[k] }));
-      // previous session's close: the later of the last intraday point of an earlier day and the daily close before today
-      const lastDay = days[days.length - 1], pd = [...daily(k)].reverse().find(r => r.d < lastDay);
-      const pi = I.filter(r => dayOf(r.t) < lastDay && fin(r[k])).pop();
-      let prev = pd ? pd.v : null; if (pi && (!pd || dayOf(pi.t) >= pd.d)) prev = pi[k];
-      return { SM, pts, intraday: true, prev };
-    }
-    const dl = daily(k).slice(-R).map(r => ({ d: r.d, v: r.v }));
-    // sessions newer than the last daily close: take each session's latest snapshot; the final one is the live value
-    const lastD = dl.length ? dl[dl.length - 1].d : '', newer = [...new Set(I.map(r => dayOf(r.t)))].filter(dd => dd > lastD);
-    newer.forEach((dd, j) => { const r = I.filter(x => dayOf(x.t) === dd && fin(x[k])).pop(); if (r) dl.push({ d: dd, t: r.t, v: r[k], live: j === newer.length - 1 }); });
-    const all = daily(k), prev = dl.length > 1 ? dl[dl.length - 2].v : null;
-    return { SM, pts: dl, intraday: false, prev, year: all.slice(-252).map(r => r.v) };
+  const H = d.history, A = d.archive || [], I = d.intraday || [], B = d.bars || [];
+  const isLive = marketOpenNow() && (Date.now() - new Date(d.meta.generated_utc)) / 6e4 <= 75;
+  const snapKey = r => r.t.slice(0, 10) + ' ' + r.t.slice(11, 16);
+  const hIdx = Object.fromEntries(H.dates.map((x, i) => [x, i]));
+  const allSessions = () => [...new Set([...H.dates.slice(-10), ...B.map(s => s.date), ...I.map(r => r.t.slice(0, 10)), ...A.map(r => r.d)])].sort();
+  // latest value of an index series within one session (bars and snapshots, whichever is later)
+  function sessionLast(k, day) {
+    let best = null;
+    const s = B.find(b => b.date === day);
+    if (s) for (let i = s.t.length - 1; i >= 0; i--) if (fin(s[k][i])) { best = { v: s[k][i], key: day + ' ' + s.t[i] }; break; }
+    const sn = I.filter(r => r.t.slice(0, 10) === day && fin(r[k])).pop();
+    if (sn && (!best || snapKey(sn) >= best.key)) best = { v: sn[k], key: snapKey(sn) };
+    if (!best && hIdx[day] != null && fin(H[k][hIdx[day]])) best = { v: H[k][hIdx[day]], key: day + ' 16:00' };
+    return best;
   }
+  const idxClose = (k, day) => (hIdx[day] != null && fin(H[k][hIdx[day]])) ? H[k][hIdx[day]] : (sessionLast(k, day) || {}).v ?? null;
+  const mineAt = (k, day) => { const sn = I.filter(r => r.t.slice(0, 10) === day && fin(r[k])).pop(); const ar = A.find(r => r.d === day); return sn ? sn[k] : ar && fin(ar[k]) ? ar[k] : null; };
+
+  function build(SM) {
+    const R = HL_RANGES.find(r => r[0] === rng)[1], intra = rng === '1D' || rng === '5D';
+    const val = SM.mine ? SM.k : SM.k, refK = SM.ref && SM.ref.k;
+    let axis = [];
+    if (intra) {
+      const days = [...new Set([...B.map(s => s.date), ...I.map(r => r.t.slice(0, 10))])].sort().slice(-R);
+      const m = new Map();
+      days.forEach(day => { const s = B.find(x => x.date === day); if (s) s.t.forEach((hm, i) => m.set(day + ' ' + hm, { key: day + ' ' + hm, d: day, hm, bar: [s, i] })); });
+      I.forEach(r => { const day = r.t.slice(0, 10); if (!days.includes(day)) return; const key = snapKey(r); const e = m.get(key) || { key, d: day, hm: r.t.slice(11, 16) }; e.snap = r; m.set(key, e); });
+      axis = [...m.values()].sort((a, b) => (a.key < b.key ? -1 : 1));
+      axis.forEach(e => {
+        const idxV = k => e.bar && fin(e.bar[0][k][e.bar[1]]) ? e.bar[0][k][e.bar[1]] : e.snap && fin(e.snap[k]) ? e.snap[k] : null;
+        e.v = SM.mine ? (e.snap && fin(e.snap[val]) ? e.snap[val] : null) : idxV(val);
+        e.r = refK ? (v => (v == null ? null : SM.ref.tf(v)))(idxV(refK)) : null;
+      });
+    } else {
+      const last = H.dates[H.dates.length - 1];
+      axis = H.dates.slice(-R).map(day => ({ key: day, d: day }));
+      allSessions().filter(x => x > last).forEach(x => axis.push({ key: x, d: x, newer: true }));
+      axis.forEach(e => {
+        e.v = SM.mine ? mineAt(val, e.d) : (e.newer ? (sessionLast(val, e.d) || {}).v ?? null : idxClose(val, e.d));
+        if (refK) { const rv = e.newer ? (sessionLast(refK, e.d) || {}).v ?? null : idxClose(refK, e.d); e.r = rv == null ? null : SM.ref.tf(rv); }
+      });
+    }
+    const withV = axis.filter(e => fin(e.v)), cur = withV[withV.length - 1] || null;
+    let prev = null;
+    if (cur) {
+      const before = allSessions().filter(x => x < cur.d);
+      for (let i = before.length - 1; i >= 0 && prev == null; i--) prev = SM.mine ? mineAt(val, before[i]) : idxClose(val, before[i]);
+    }
+    const latestDay = allSessions().pop();
+    const year = SM.mine ? null : H[val].slice(-252).filter(fin);
+    return { axis, cur, prev, year, intra, live: isLive && cur && cur.d === latestDay };
+  }
+
   function draw() {
-    const { SM, pts, intraday, prev, year } = series(HL_SEL);
-    const cur = pts[pts.length - 1];
-    // header stats
+    const SM = HL_SERIES.find(s => s.k === HL_SEL), { axis, cur, prev, year, intra, live } = build(SM);
     $('hlName').textContent = SM.long || SM.n;
     $('hlVal').textContent = cur ? SM.f(cur.v) : '–';
-    const tag = $('hlTag'); tag.className = 'status ' + (isLive && cur && (cur.live || intraday) ? 'live' : 'closed'); tag.innerHTML = '<i></i>';
-    tag.append(isLive && cur && (cur.live || intraday) ? 'Live · ' + fmtET(new Date(lastI.t), false) + ' ET' : cur ? 'Close · ' + fmtExp(cur.d) : 'no data');
+    const tag = $('hlTag'); tag.className = 'status ' + (live ? 'live' : 'closed'); tag.innerHTML = '<i></i>';
+    tag.append(!cur ? 'no data yet' : live ? 'Live · ' + (cur.hm || '') + ' ET' : 'Close · ' + fmtExp(cur.d));
     const ch = $('hlChg'); ch.replaceChildren();
-    if (cur && fin(prev)) { const dv = cur.v - prev; ch.append(chgSpan(SM.k === 'SPX' ? dv / prev * 100 : dv, 2, SM.k === 'SPX' ? ' %' : (SM.k === 'move' || SM.k === 'v30' ? ' pts' : '')), document.createTextNode(' vs. previous session')); }
-    const pr = $('hlPct');
-    if (cur && year && year.length >= 200 && !SM.mine) { const below = year.filter(v => v < cur.v).length / year.length; pr.textContent = `${Math.round(below * 100)}th percentile of the past year`; }
-    else pr.textContent = SM.mine ? `my own measure · history since ${fmtExp((A[0] || { d: dayOf(lastI ? lastI.t : H.dates[H.dates.length - 1]) }).d)}, grows every session` : '';
-    // chart
-    const W = host.clientWidth || 700;
-    if (pts.length < 2) {
-      const base = chartBase(host, { height: 280, m: { l: 50 }, x: [0, 1], y: [0, 1], yTicks: false, xTicks: false, baseline: false });
-      txt(base.svg, W / 2, 130, intraday ? 'Intraday points build up with every 30-minute update during US trading hours.' : 'History for this series starts with the first archived session and grows daily.', 'lbl-svg', 'middle');
-      if (cur) txt(base.svg, W / 2, 156, `Latest: ${SM.f(cur.v)}${cur.t ? ' · ' + fmtET(new Date(cur.t)) + ' ET' : ' · ' + fmtExp(cur.d)}`, 'ann', 'middle');
-      fillTable(fig, ['Time', SM.n], pts.map(p => [p.t || p.d, SM.f(p.v)]));
-      $('hlRead').textContent = '';
-      return;
+    if (cur && fin(prev)) { const dv = cur.v - prev; ch.append(chgSpan(SM.k === 'SPX' ? dv / prev * 100 : dv, 2, SM.k === 'SPX' ? ' %' : SM.k === 'zg' ? ' pts' : (SM.k === 'move' || SM.k === 'v30' ? ' pts' : '')), document.createTextNode(' vs. previous session')); }
+    $('hlPct').textContent = cur && year && year.length >= 200 ? `${Math.round(year.filter(v => v < cur.v).length / year.length * 100)}th percentile of the past year` : SM.mine ? `my measure since ${fmtExp((A[0] || { d: cur ? cur.d : H.dates[H.dates.length - 1] }).d)} · grey: official Cboe reference` : '';
+    const leg = $('hlLeg'); leg.hidden = !SM.ref;
+    if (SM.ref) { leg.innerHTML = '<li><span class="key k-s1"></span>My measure</li><li><span class="key k-ref"></span></li>'; leg.lastChild.append(SM.ref.n); }
+
+    const n = axis.length, vals = axis.flatMap(e => [e.v, e.r]).filter(fin);
+    if (intra && rng === '1D' && fin(prev) && !SM.mine) vals.push(prev);
+    if (n < 2 || !vals.length) {
+      const base = chartBase(host, { height: 300, m: { l: 50 }, x: [0, 1], y: [0, 1], yTicks: false, xTicks: false, baseline: false });
+      txt(base.svg, (host.clientWidth || 700) / 2, 140, 'No data in this range yet — it fills with every update during US trading hours.', 'lbl-svg', 'middle');
+      fillTable(fig, ['Time', SM.n], []); $('hlRead').textContent = ''; return;
     }
-    const vals = pts.map(p => p.v).concat(fin(prev) && intraday && rng === '1D' ? [prev] : []);
-    const base = chartBase(host, { height: 300, m: { l: SM.k === 'SPX' || SM.k === 'zg' ? 58 : 44, r: 64, b: 34 }, x: [0, pts.length - 1], y: niceDomain(Math.min(...vals), Math.max(...vals), 5), xTicks: false, baseline: false,
-      yFmt: v => SM.k === 'SPX' || SM.k === 'zg' ? num(v, 0) : v.toFixed(v % 1 ? 1 : 0) });
-    const { svg, x, y, plot } = base;
+    const big = SM.big;
+    const base = chartBase(host, { height: 300, m: { l: big ? 58 : 44, r: 70, b: 34 }, x: [0, n - 1], y: niceDomain(Math.min(...vals), Math.max(...vals), 5), xTicks: false, baseline: false, yFmt: v => big ? num(v, 0) : v.toFixed(v % 1 ? (Math.abs(v) < 2 ? 2 : 1) : 0) });
+    const { svg, x, y, plot } = base, want = Math.max(3, Math.min(7, Math.floor((plot.x1 - plot.x0) / 110)));
     // x labels
-    const n = pts.length, want = Math.max(3, Math.min(7, Math.floor((plot.x1 - plot.x0) / 110)));
-    if (intraday) {
-      const segs = []; pts.forEach((p, i) => { if (!segs.length || segs[segs.length - 1].d !== p.d) segs.push({ d: p.d, a: i, b: i, t: p.t }); else segs[segs.length - 1].b = i; });
-      if (segs.length === 1) {
-        pts.forEach((p, i) => { if (i % Math.max(1, Math.round(n / want)) === 0) txt(svg, x(i), plot.y1 + 17, fmtET(new Date(p.t), false), 'tick', i === 0 ? 'start' : 'middle'); });
-      } else {
-        let lastLx = -1e9;   // one label per session, centred on its segment; skip if it would collide
-        segs.forEach((g, j) => {
-          if (j) S('line', { x1: x(g.a - 0.5), x2: x(g.a - 0.5), y1: plot.y0, y2: plot.y1, class: 'grid' }, svg);
-          const cx = x((g.a + g.b) / 2);
-          if (cx - lastLx >= 64) { txt(svg, cx, plot.y1 + 17, new Date(g.t).toLocaleDateString('en-US', { weekday: 'short', day: 'numeric', timeZone: ET }), 'tick', 'middle'); lastLx = cx; }
-        });
-      }
+    if (intra) {
+      const segs = []; axis.forEach((e, i) => { if (!segs.length || segs[segs.length - 1].d !== e.d) segs.push({ d: e.d, a: i, b: i }); else segs[segs.length - 1].b = i; });
+      if (segs.length === 1) { let lx = -1e9; axis.forEach((e, i) => { if ((e.hm.endsWith(':00') || i === 0) && x(i) - lx >= 48) { txt(svg, x(i), plot.y1 + 17, e.hm, 'tick', i === 0 ? 'start' : 'middle'); lx = x(i); } }); }
+      else { let lx = -1e9; segs.forEach((g, j) => { if (j) S('line', { x1: x(g.a - 0.5), x2: x(g.a - 0.5), y1: plot.y0, y2: plot.y1, class: 'grid' }, svg); const c = x((g.a + g.b) / 2); if (c - lx >= 64) { txt(svg, c, plot.y1 + 17, new Date(g.d + 'T12:00:00Z').toLocaleDateString('en-US', { weekday: 'short', day: 'numeric', timeZone: 'UTC' }), 'tick', 'middle'); lx = c; } }); }
     } else {
       const step = Math.max(1, Math.round(n / want));
-      for (let i = 0; i < n; i += step) { const dd = new Date(pts[i].d + 'T12:00:00Z'); txt(svg, x(i), plot.y1 + 17, dd.toLocaleDateString('en-US', rng === '5Y' ? { month: 'short', year: 'numeric', timeZone: 'UTC' } : rng === '1M' ? { day: 'numeric', month: 'short', timeZone: 'UTC' } : { month: 'short', year: '2-digit', timeZone: 'UTC' }), 'tick', i === 0 ? 'start' : 'middle'); }
+      for (let i = 0; i < n; i += step) txt(svg, x(i), plot.y1 + 17, new Date(axis[i].d + 'T12:00:00Z').toLocaleDateString('en-US', rng === '5Y' ? { month: 'short', year: 'numeric', timeZone: 'UTC' } : rng === '1M' ? { day: 'numeric', month: 'short', timeZone: 'UTC' } : { month: 'short', year: '2-digit', timeZone: 'UTC' }), 'tick', i === 0 ? 'start' : 'middle');
     }
-    if (intraday && rng === '1D' && fin(prev)) { S('line', { x1: plot.x0, x2: plot.x1, y1: y(prev), y2: y(prev), class: 'marker', 'stroke-opacity': 0.5 }, svg); txt(svg, plot.x0 + 4, y(prev) - 6, 'previous close ' + SM.f(prev), 'ann'); }
-    const xs = pts.map((_, i) => i), ys = pts.map(p => p.v);
-    S('path', { d: linePath(xs, ys, x, y) + `L${x(n - 1)},${plot.y1}L${x(0)},${plot.y1}Z`, class: 'wash-s1' }, svg);
-    S('path', { d: linePath(xs, ys, x, y), class: 'ln ln-s1' }, svg);
-    const lx = x(n - 1), ly = y(cur.v), live = isLive && (cur.live || intraday);
-    if (live) S('circle', { cx: lx, cy: ly, r: 5, class: 'pulse-ring' }, svg);
-    S('circle', { cx: lx, cy: ly, r: 5, class: 'ring f-s1' }, svg);
-    txt(svg, lx + 9, ly + 4, SM.f(cur.v), 'lbl-strong');
-    txt(svg, lx + 9, ly + 18, live ? 'live' : 'close', 'ann');
+    if (intra && rng === '1D' && fin(prev) && !SM.mine) { S('line', { x1: plot.x0, x2: plot.x1, y1: y(prev), y2: y(prev), class: 'marker', 'stroke-opacity': 0.5 }, svg); txt(svg, plot.x0 + 4, y(prev) - 6, 'previous close ' + SM.f(prev), 'ann'); }
+    const xs = axis.map((_, i) => i);
+    if (SM.ref) S('path', { d: linePath(xs, axis.map(e => e.r), x, y), class: 'ln ln-ref', 'stroke-opacity': 0.85 }, svg);
+    const pts = axis.map((e, i) => [i, e.v]).filter(p => fin(p[1]));
+    if (SM.mine) {
+      if (pts.length > 1) S('path', { d: linePath(pts.map(p => p[0]), pts.map(p => p[1]), x, y), class: 'ln ln-s1' }, svg);
+      pts.forEach(p => S('circle', { cx: x(p[0]), cy: y(p[1]), r: 3.5, class: 'ring f-s1' }, svg));
+    } else {
+      const dense = pts.length === n;
+      if (dense) S('path', { d: linePath(xs, axis.map(e => e.v), x, y) + `L${x(n - 1)},${plot.y1}L${x(0)},${plot.y1}Z`, class: 'wash-s1' }, svg);
+      S('path', { d: linePath(xs, axis.map(e => e.v), x, y), class: 'ln ln-s1' }, svg);
+    }
+    if (cur) {
+      const ci = axis.indexOf(cur), lx = x(ci), ly = y(cur.v);
+      if (live) S('circle', { cx: lx, cy: ly, r: 5, class: 'pulse-ring' }, svg);
+      S('circle', { cx: lx, cy: ly, r: 5, class: 'ring f-s1' }, svg);
+      txt(svg, Math.min(lx + 9, plot.x1 + 6), ly + 4, SM.f(cur.v), 'lbl-strong'); txt(svg, Math.min(lx + 9, plot.x1 + 6), ly + 18, live ? 'live' : 'close', 'ann');
+    }
     const dot = S('circle', { r: 4, class: 'ring f-s1', visibility: 'hidden' }, svg);
     interact(base, host, n, i => x(i), i => {
-      const p = pts[i]; dot.setAttribute('cx', x(i)); dot.setAttribute('cy', y(p.v)); dot.setAttribute('visibility', 'visible');
-      return { title: p.t ? fmtET(new Date(p.t)) + ' ET' + (p.live ? ' · live' : '') : fmtExp(p.d), rows: [{ value: SM.f(p.v), label: SM.n, color: col('--s1') }], y: y(p.v) };
+      const e = axis[i], rows = [];
+      if (fin(e.v)) { dot.setAttribute('cx', x(i)); dot.setAttribute('cy', y(e.v)); dot.setAttribute('visibility', 'visible'); rows.push({ value: SM.f(e.v), label: SM.mine ? 'my measure' : SM.n, color: col('--s1') }); } else dot.setAttribute('visibility', 'hidden');
+      if (SM.ref && fin(e.r)) rows.push({ value: SM.ref.f(e.r), label: SM.ref.n, color: col('--ref') });
+      if (!rows.length) rows.push({ value: '–', label: 'no observation' });
+      return { title: intra ? fmtExp(e.d) + ' · ' + e.hm + ' ET' : fmtExp(e.d) + (e.newer ? ' · latest' : ''), rows, y: y(fin(e.v) ? e.v : fin(e.r) ? e.r : prev) };
     }, { onClear: () => dot.setAttribute('visibility', 'hidden'), focusIndex: n - 1 });
-    const lo = Math.min(...ys), hi = Math.max(...ys);
-    $('hlRead').textContent = `${rng} range ${SM.f(lo)} – ${SM.f(hi)}. ${intraday ? 'Points are the 30-minute snapshots (Cboe, about 15 min delayed).' : 'Daily closes from Cboe' + (SM.mine ? ' (my end-of-day archive)' : '') + (pts[n - 1].live ? '; the last point is today’s live value.' : '.')}`;
-    fillTable(fig, [intraday ? 'Time (ET)' : 'Date', SM.n], pts.slice().reverse().map(p => [p.t ? fmtET(new Date(p.t)) : p.d, SM.f(p.v)]));
+    const mv = pts.map(p => p[1]);
+    $('hlRead').textContent = SM.mine
+      ? `Blue: my measure — ${pts.length} observation${pts.length === 1 ? '' : 's'} in this range (end-of-day archive since ${fmtExp((A[0] || { d: cur ? cur.d : '' }).d)} and 30-minute snapshots), growing every session. Grey: ${SM.ref.n}, the official comparison with full history.`
+      : `${rng} range ${SM.f(Math.min(...mv))} – ${SM.f(Math.max(...mv))}. ${intra ? '5-minute bars from Cboe (about 15 minutes delayed) plus the latest snapshot.' : 'Daily closes from Cboe' + (axis[n - 1].newer ? '; the last point is the latest session’s value.' : '.')}`;
+    fillTable(fig, [intra ? 'Time (ET)' : 'Date', SM.mine ? 'My measure' : SM.n].concat(SM.ref ? [SM.ref.n] : []), axis.slice().reverse().filter(e => fin(e.v) || fin(e.r)).map(e => [intra ? e.d + ' ' + e.hm : e.d, fin(e.v) ? SM.f(e.v) : '–'].concat(SM.ref ? [fin(e.r) ? SM.ref.f(e.r) : '–'] : [])));
   }
   draw();
 }
