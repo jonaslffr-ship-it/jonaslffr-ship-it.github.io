@@ -6,6 +6,7 @@ from scipy.stats import norm
 
 sys.path.insert(0, os.path.dirname(__file__))
 import live_snapshot as ls
+import implied_range as ir
 
 S, SIG, R, Q = 5000.0, 0.20, 0.04, 0.012
 T0 = dt.datetime(2026, 9, 25, 16, 0)            # Friday 16:00 ET = valuation time
@@ -34,6 +35,45 @@ def synthetic_chain():
                                                           "last_trade_time": T0.isoformat(), "options": opts}}
 
 
+def level_study_checks():
+    """Known answer for the implied-range calibration and the level study: sessions of a driftless arithmetic
+    Brownian motion whose daily sigma equals the implied one (IV / sqrt 252). Then: close inside +-k sigma ->
+    2 Phi(k) - 1, touch -> 2 (1 - Phi(k)) (less a small discrete-monitoring bias), a touched level closes back
+    inside half the time, realized / implied = 1, and injected vendor-style bad opens are excluded."""
+    rng = np.random.default_rng(7)
+    n, steps, iv = 6000, 780, 16.0
+    sig = iv / 100 / math.sqrt(252)
+    ohlc, c0, d0, iv_map = [], 5000.0, dt.date(2000, 1, 3), {}
+    ohlc.append((d0.isoformat(), c0, c0, c0, c0))
+    for i in range(1, n + 1):
+        path = c0 * (1 + sig * np.cumsum(rng.standard_normal(steps)) / math.sqrt(steps))
+        o, h, l, c = float(path[0]), float(path.max()), float(path.min()), float(path[-1])
+        if i % 1000 == 1: o = c0                                   # vendor fill-in: open = prior close
+        if i % 1000 == 2: o = h + 5.0                              # vendor error: open outside the range
+        iv_map[ohlc[-1][0]] = iv
+        ohlc.append(((d0 + dt.timedelta(days=i)).isoformat(), o, h, l, c)); c0 = c
+    cal = ir.calibrate(ohlc, iv_map)
+    st = ir.study_block(ohlc, ohlc, {"VIX": iv_map, "VXN": iv_map})
+    fails = []
+    K = np.array(ir.K_LEVELS)
+    th_in, th_touch = 2 * norm.cdf(K) - 1, 2 * (1 - norm.cdf(K))
+    if np.max(np.abs(np.array(cal["inside"]) - th_in)) > 0.02: fails.append("calibration: inside vs normal")
+    for side in ("touch_up", "touch_dn"):
+        if np.max(np.abs(np.array(cal[side]) - th_touch)) > 0.035: fails.append(f"calibration: {side} vs reflection principle")
+    if abs(cal["rv_over_iv"] - 1) > 0.03: fails.append("calibration: realized / implied != 1")
+    h = np.array(st["ES"]["h"]) / 1e4; l = np.array(st["ES"]["l"]) / 1e4; c = np.array(st["ES"]["c"]) / 1e4
+    for j, k in enumerate(ir.K_LEVELS):
+        up, dn = h >= k * sig, l <= -k * sig
+        if up.sum() != round(cal["touch_up"][j] * cal["n"]) or dn.sum() != round(cal["touch_dn"][j] * cal["n"]):
+            fails.append(f"study vs calibration touch counts at {k} sigma")
+        held = (np.sum(up & (c < k * sig)) + np.sum(dn & (c > -k * sig))) / (up.sum() + dn.sum())
+        if abs(held - 0.5) > 0.035: fails.append(f"held share at {k} sigma = {held:.3f}, expected 0.5")
+        print(f"  level {k:4}σ  inside {cal['inside'][j]:.3f} (th {th_in[j]:.3f})  touch up/dn {cal['touch_up'][j]:.3f}/{cal['touch_dn'][j]:.3f} (th {th_touch[j]:.3f})  held {held:.3f} (th 0.5)")
+    if st["open_excluded"]["ES"] != 12: fails.append(f"bad opens excluded: {st['open_excluded']['ES']}, expected 12")
+    print(f"  realized/implied {cal['rv_over_iv']:.3f} · n {cal['n']} · bad opens excluded {st['open_excluded']['ES']}")
+    return fails
+
+
 def main():
     quotes = {n: {"current_price": 20.0, "price_change": 0} for n in ("VIX1D", "VIX9D", "VIX", "VIX3M", "VVIX")}
     snap = ls.snapshot(synthetic_chain(), quotes, {"dates": [], "VIX": []})
@@ -58,6 +98,8 @@ def main():
     n_opts = len(synthetic_chain()["data"]["options"])
     if abs(tot_oi - 100.0 * n_opts) > 1: fails.append("bucket OI does not add up")
     print("zero-gamma (A):", snap["gex"]["zero_gamma_A"], "| buckets OI total", tot_oi)
+    print("level study (synthetic Brownian sessions):")
+    fails += level_study_checks()
     if fails:
         print("FAILED:", fails); sys.exit(1)
     print("all live-snapshot checks passed")

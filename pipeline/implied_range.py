@@ -5,6 +5,8 @@
 * Calibration over the last five years: how often the index closed inside +-k sigma of the
   prior close, and how often the day's high / low touched +-k sigma, vs. the normal /
   driftless-Brownian benchmarks. Descriptive statistics, not a forecast test.
+* Level study: per-session open / high / low / close relative to the prior close, so the browser can
+  measure touch -> held / broke for any level, filter and volatility index.
 """
 from __future__ import annotations
 
@@ -105,7 +107,10 @@ def cboe_spx_ohlc(years: int = 5) -> list[tuple[str, float, float, float, float]
 
 
 def calibrate(ohlc: list, iv: dict, last_days: int | None = None) -> dict | None:
-    """Close inside +-k sigma and intraday touches of +k / -k sigma, sigma from the prior close's IV."""
+    """Close inside +-k sigma and intraday touches of +k / -k sigma, sigma from the prior close's IV.
+
+    Levels are exactly the ladder's: prior close x (1 +- k sigma), sigma = IV / 100 / sqrt(252), so all
+    comparisons use simple returns (H / C0 - 1 >= k sigma etc.)."""
     rows = ohlc[-(last_days + 1):] if last_days else ohlc
     ins = np.zeros(len(K_LEVELS)); up = np.zeros(len(K_LEVELS)); dn = np.zeros(len(K_LEVELS))
     n, rv, ivv = 0, 0.0, 0.0
@@ -115,7 +120,7 @@ def calibrate(ohlc: list, iv: dict, last_days: int | None = None) -> dict | None
             continue
         s = v / 100 / math.sqrt(252)
         c0 = prev[4]
-        rc, rh, rl = math.log(cur[4] / c0), math.log(cur[2] / c0), math.log(cur[3] / c0)
+        rc, rh, rl = cur[4] / c0 - 1, cur[2] / c0 - 1, cur[3] / c0 - 1
         k = np.array(K_LEVELS) * s
         ins += np.abs(rc) <= k; up += rh >= k; dn += rl <= -k
         n += 1; rv += rc * rc; ivv += s * s
@@ -124,6 +129,42 @@ def calibrate(ohlc: list, iv: dict, last_days: int | None = None) -> dict | None
     return {"n": n, "from": rows[0][0], "to": rows[-1][0], "inside": (ins / n).round(4).tolist(),
             "touch_up": (up / n).round(4).tolist(), "touch_dn": (dn / n).round(4).tolist(),
             "rv_over_iv": round(math.sqrt(rv / ivv), 4)}
+
+
+def open_usable(c0: float, o: float, h: float, l: float) -> bool:
+    """Vendor opens that equal the prior close to the cent, or lie outside the day's range, are fill-ins
+    (checked against a second source: 20 such NDX sessions in 2021-2026, 1 SPX session)."""
+    return abs(o - c0) > 1e-9 and l - 1e-9 <= o <= h + 1e-9
+
+
+def study_block(spx_ohlc: list, ndx_ohlc: list, iv_hist: dict) -> dict | None:
+    """Per-session data for the level study, one row per S&P 500 session: open / high / low / close relative
+    to the prior close (basis points, 3 decimals = the indices' own 0.01-point precision) and the prior
+    close's implied vols. The browser turns these into sigma units for any volatility index and level."""
+    if not spx_ohlc:
+        return None
+    ndx = {r[0]: r for r in ndx_ohlc}
+    dates, cols = [], {"ES": {"o": [], "h": [], "l": [], "c": []}, "NQ": {"o": [], "h": [], "l": [], "c": []}}
+    ivs = {k: [] for k in ("VIX", "VIX1D", "VXN", "VIX3M")}
+    bad_open = {"ES": 0, "NQ": 0}
+    bp = lambda x, c0: round((x / c0 - 1) * 1e4, 3)
+    for prev, cur in zip(spx_ohlc[:-1], spx_ohlc[1:]):
+        dates.append(cur[0])
+        for key, p, c in (("ES", prev, cur), ("NQ", ndx.get(prev[0]), ndx.get(cur[0]))):
+            if not p or not c:
+                for f in "ohlc":
+                    cols[key][f].append(None)
+                continue
+            c0 = p[4]
+            ok = open_usable(c0, c[1], c[2], c[3])
+            bad_open[key] += not ok
+            cols[key]["o"].append(bp(c[1], c0) if ok else None)
+            cols[key]["h"].append(bp(c[2], c0)); cols[key]["l"].append(bp(c[3], c0)); cols[key]["c"].append(bp(c[4], c0))
+        for k in ivs:
+            v = (iv_hist.get(k) or {}).get(prev[0])
+            ivs[k].append(v if v and v > 0 else None)
+    return {"dates": dates, **cols, "iv": ivs, "open_excluded": bad_open,
+            "note": "returns in basis points vs. the prior close; iv = prior close's index level"}
 
 
 def build(snap: dict, quotes: dict, ndx_chain: dict | None, hist: dict) -> dict:

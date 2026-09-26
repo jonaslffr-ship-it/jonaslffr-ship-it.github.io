@@ -473,6 +473,18 @@ def fetch_bars() -> dict | None:
                 last = pts[j][1]; j += 1
             vals.append(None if last is None else round(last, 2))
         out[name] = vals
+        if name in ("SPX", "NDX"):          # true 5-minute extremes from the 1-minute highs / lows (touch detection)
+            hl = sorted((r["datetime"][11:16], float(r["price"]["high"]), float(r["price"]["low"])) for r in rows
+                        if r.get("price") and r["price"].get("high") and r["price"].get("low") and float(r["price"]["low"]) > 0)
+            hi, lo, j, prev = [], [], 0, "00:00"
+            for sl in slots:
+                bh, bl = None, None
+                while j < len(hl) and hl[j][0] <= sl:
+                    if hl[j][0] > prev:
+                        bh = hl[j][1] if bh is None else max(bh, hl[j][1]); bl = hl[j][2] if bl is None else min(bl, hl[j][2])
+                    j += 1
+                hi.append(None if bh is None else round(bh, 2)); lo.append(None if bl is None else round(bl, 2)); prev = sl
+            out[name + "_h"], out[name + "_l"] = hi, lo
     return {"date": day, **out}
 
 
@@ -524,9 +536,14 @@ def main():
     rng["calibration"] = implied_range.calibration_block(spx_ohlc, ndx_ohlc, hs)
     snap["range"] = rng
     os.makedirs(a.out, exist_ok=True)
+    study = implied_range.study_block(spx_ohlc, ndx_ohlc, hs)
+    if study:
+        sb = json.dumps({"generated_utc": snap["meta"]["generated_utc"], **study}, separators=(",", ":"), allow_nan=False)
+        with open(os.path.join(a.out, "study.js"), "w", encoding="utf-8") as f: f.write("window.__STUDY__=" + sb + ";" + chr(10))
     hdir = os.path.join(a.out, "history")
     # end-of-day archive (small summary), one file per trading date
-    if not snap["meta"]["market_open"]:
+    now_et = dt.datetime.now(NY)
+    if snap["meta"]["valuation_time_et"][:10] == now_et.date().isoformat() and now_et.time() >= dt.time(16, 15):
         day = snap["meta"]["valuation_time_et"][:10]
         os.makedirs(hdir, exist_ok=True)
         e0 = snap["expiries"][0] if snap["expiries"] else {}

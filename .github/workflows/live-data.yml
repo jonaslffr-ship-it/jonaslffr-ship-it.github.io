@@ -1,14 +1,14 @@
 # Live SPX volatility data for the website (Cboe delayed quotes, ~15 min delay).
-# Every 30 minutes during US trading hours: run the known-answer tests, build data/live/latest.{json,js}
-# (derived analytics only), and deploy the site to GitHub Pages. After the close: commit a small
-# end-of-day summary to data/live/history/ so the archive grows in public.
+# Every 15 minutes during US trading hours (off-peak minutes, GitHub's scheduler is busiest on the hour):
+# run the known-answer tests, build data/live/latest.{json,js} and study.js (derived analytics only), and
+# deploy the site to GitHub Pages. After the close: commit a small end-of-day summary to
+# data/live/history/ so the archive grows in public (written only after 16:15 ET of the valuation day).
 # Pages setting: Settings -> Pages -> Source: "GitHub Actions".
 name: live-data
 
 on:
   schedule:
-    - cron: "*/30 13-21 * * 1-5"   # UTC; covers 09:30–16:15 ET in both EDT and EST
-    - cron: "40 21 * * 1-5"        # after the close: end-of-day archive
+    - cron: "7,22,37,52 13-21 * * 1-5"   # UTC; covers 09:30-16:15 ET in both EDT and EST, plus post-close runs for the archive
   workflow_dispatch:
   push:
     branches: [main]
