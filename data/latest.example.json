@@ -1,0 +1,12 @@
+{
+  "date": "2026-10-13",
+  "committed_at_utc": "2026-10-13T12:31:07Z",
+  "model": "HAR-IV-GK v1 (pre-registered)",
+  "target": "Garman-Klass variance, SPX, session 2026-10-13",
+  "forecast_vol_annualized": 0.142,
+  "interval_80": [0.101, 0.199],
+  "inputs_sha256": "placeholder",
+  "git_sha": "placeholder",
+  "repo": "jonaslffr-ship-it.github.io",
+  "_note": "EXAMPLE ONLY - placeholder numbers illustrating the data contract. The site never reads this file."
+}
