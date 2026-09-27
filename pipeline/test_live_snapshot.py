@@ -13,23 +13,25 @@ T0 = dt.datetime(2026, 9, 25, 16, 0)            # Friday 16:00 ET = valuation ti
 EXPIRIES = [dt.date(2026, 9, 30), dt.date(2026, 10, 30), dt.date(2026, 12, 31), dt.date(2027, 6, 30)]
 
 
-def bs(K, T, call):
+def bs(K, T, call, sig=SIG):
+    SIG = sig
     d1 = (math.log(S / K) + (R - Q + 0.5 * SIG ** 2) * T) / (SIG * math.sqrt(T)); d2 = d1 - SIG * math.sqrt(T)
     if call: return S * math.exp(-Q * T) * norm.cdf(d1) - K * math.exp(-R * T) * norm.cdf(d2)
     return K * math.exp(-R * T) * norm.cdf(-d2) - S * math.exp(-Q * T) * norm.cdf(-d1)
 
 
-def synthetic_chain():
+def synthetic_chain(root="SPXW", sig_of=lambda i: SIG):
     opts = []
-    for d in EXPIRIES:
+    for i, d in enumerate(EXPIRIES):
         T = (dt.datetime.combine(d, dt.time(16, 0)) - T0).total_seconds() / ls.YEAR
-        lo, hi = S * math.exp(-6 * SIG * math.sqrt(T)), S * math.exp(4.5 * SIG * math.sqrt(T))   # wide enough: no truncation
+        sg = sig_of(i)
+        lo, hi = S * math.exp(-6 * sg * math.sqrt(T)), S * math.exp(4.5 * sg * math.sqrt(T))   # wide enough: no truncation
         for K in np.arange(math.floor(lo / 5) * 5, hi + 0.1, 5.0):
             for cp in "CP":
-                px = bs(K, T, cp == "C")
+                px = bs(K, T, cp == "C", sg)
                 half = max(0.05, 0.004 * px)
                 bid = round(px - half, 2) if px - half >= 0.05 else 0.0
-                opts.append({"option": f"SPXW{d:%y%m%d}{cp}{int(K * 1000):08d}", "bid": bid, "ask": round(px + half, 2),
+                opts.append({"option": f"{root}{d:%y%m%d}{cp}{int(K * 1000):08d}", "bid": bid, "ask": round(px + half, 2),
                              "open_interest": 100.0, "volume": 10.0})
     return {"timestamp": "2026-09-25 20:00:00", "data": {"current_price": S, "price_change": 0, "price_change_percent": 0, "iv30": 20,
                                                           "last_trade_time": T0.isoformat(), "options": opts}}
@@ -74,6 +76,49 @@ def level_study_checks():
     return fails
 
 
+def term_checks():
+    """Term structure and calendar arbitrage: flat vol -> flat, forward vol = sigma, no violations; a falling vol curve
+    whose total variance still rises -> backwardation without arbitrage; an inversion strong enough to make total
+    variance fall -> flagged. Plus the same known answers for an NDX-style chain (NDXP roots, VXN check)."""
+    fails = []
+    q = {n: {"current_price": 20.0, "price_change": 0} for n in ("VIX1D", "VIX9D", "VIX", "VIX3M", "VVIX")}
+    flat = ls.snapshot(synthetic_chain(), q, None)["term"]
+    vols = [x["vol"] for x in flat["tenors"] if x["vol"]]
+    fw = [f["atm"] for f in flat["forward"] if f["atm"]]
+    print(f"  flat 20 %: tenors {vols} · state {flat['state']} · forward ATM vols {fw} · calendar {flat['calendar']['pairs']} pairs, {len(flat['calendar']['violations'])} violations")
+    if not vols or max(abs(v - 20) for v in vols) > 0.5: fails.append("flat: model-free tenors != 20 %")
+    if flat["state"] != "flat": fails.append("flat: state")
+    if not fw or max(abs(v - 20) for v in fw) > 0.3: fails.append("flat: forward vols != 20 %")
+    if flat["calendar"]["violations"]: fails.append("flat: calendar violations")
+    back = ls.snapshot(synthetic_chain(sig_of=lambda i: [0.30, 0.26, 0.22, 0.18][i]), q, None)["term"]
+    print(f"  backwardation 30/26/22/18 %: state {back['state']} ratio {back['ratio_3m_1m']} · violations {len(back['calendar']['violations'])} · forward ATM {[f['atm'] for f in back['forward']]}")
+    if back["state"] != "backwardation": fails.append("backwardation not detected")
+    if back["calendar"]["violations"]: fails.append("backwardation wrongly flagged as calendar arbitrage")
+    arb = ls.snapshot(synthetic_chain(sig_of=lambda i: [0.20, 0.40, 0.20, 0.20][i]), q, None)["term"]
+    bad = [(v["a"], v["b"]) for v in arb["calendar"]["violations"]]
+    print(f"  inversion 20/40/20/20 %: violations {bad} · negative ATM forward variances {arb['calendar']['atm_negative_forward']}")
+    if (EXPIRIES[1].isoformat(), EXPIRIES[2].isoformat()) not in bad: fails.append("calendar arbitrage (w falls from expiry 2 to 3) not flagged")
+    v23 = next(v for v in arb["calendar"]["violations"] if v["a"] == EXPIRIES[1].isoformat())
+    T2, T3 = arb["forward"][1]["da"], arb["forward"][1]["db"]
+    print(f"  size of the inversion: {v23['vol_pts']} vol pts (fit RMSE {v23['fit_rmse_pts']}) -> material: {not v23['within_fit_error']}; material count {arb['calendar']['material']}")
+    if v23["within_fit_error"] or arb["calendar"]["material"] < 1: fails.append("a 20-vol-point inversion must count as material")
+    # the check itself on two hand-made SVI slices: identical -> ok; back slice with lower total variance -> flagged
+    p = [0.01, 0.1, -0.5, 0.0, 0.1]
+    ok = ls.calendar_check([("a", 0.1, p, (-0.2, 0.2)), ("b", 0.2, [0.02, 0.1, -0.5, 0.0, 0.1], (-0.2, 0.2))])
+    no = ls.calendar_check([("a", 0.1, p, (-0.2, 0.2)), ("b", 0.2, [0.005, 0.1, -0.5, 0.0, 0.1], (-0.2, 0.2))])
+    print(f"  hand-made slices: increasing -> {ok}, decreasing -> {len(no[1])} violation(s)")
+    if ok[1] or not no[1]: fails.append("calendar_check on hand-made slices")
+    # NDX-style chain: same answers through the NDX configuration
+    nq = {"VXN": {"current_price": 20.0, "price_change": 0}}
+    nd = ls.snapshot(synthetic_chain(root="NDXP"), nq, None, ix="NDX")
+    e = nd["expiries"]; rc = nd["checks"]["replication_vs_cboe"]
+    print(f"  NDX config: {len(e)} expiries · ATM IVs {[round(x['atm_iv'], 4) for x in e]} · VXN check {rc} · GEX bin {nd['gex']['bin']}")
+    if len(e) != len(EXPIRIES) or max(abs(x["atm_iv"] - SIG) for x in e) > 0.002: fails.append("NDX config: ATM IV")
+    if not rc or abs(rc[0]["mine"] - 20) > 0.5: fails.append("NDX config: VXN replication")
+    if nd["gex"]["bin"] != 100 or nd["index"] != "NDX": fails.append("NDX config: metadata")
+    return fails
+
+
 def main():
     quotes = {n: {"current_price": 20.0, "price_change": 0} for n in ("VIX1D", "VIX9D", "VIX", "VIX3M", "VVIX")}
     snap = ls.snapshot(synthetic_chain(), quotes, {"dates": [], "VIX": []})
@@ -100,6 +145,8 @@ def main():
     print("zero-gamma (A):", snap["gex"]["zero_gamma_A"], "| buckets OI total", tot_oi)
     print("level study (synthetic Brownian sessions):")
     fails += level_study_checks()
+    print("term structure, calendar arbitrage, NDX configuration:")
+    fails += term_checks()
     if fails:
         print("FAILED:", fails); sys.exit(1)
     print("all live-snapshot checks passed")

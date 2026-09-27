@@ -360,6 +360,15 @@ footer p{max-width:860px}
 .msteps .formula{margin:6px 0 8px}
 .msteps .fn{margin:0 0 6px}
 .toc .chip-btn{font-size:12.5px}
+.ix-bar{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;margin:0 0 16px}
+.ix-bar .seg{min-width:300px}
+.h2-row{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;justify-content:space-between;margin:44px 0 12px}
+.h2-row h2{margin:0}
+.h2-row .seg{min-width:160px}
+.linkish{border:0;background:none;padding:0;color:var(--accent-hi);font:inherit;cursor:pointer}
+.linkish:hover{text-decoration:underline;text-underline-offset:3px}
+@media (min-width:981px){ .ix-bar{position:sticky;top:0;z-index:30;background:var(--bg);padding:10px 0;margin:-10px 0 6px} }
+.hint.ts-ok{color:var(--text2)} .hint.ts-bad{color:#ff9f95}
 .findings ul{margin:0;padding-left:20px}
 .findings li{margin:6px 0;font-size:14px;color:var(--text2)}
 .findings li b{color:var(--text)}
@@ -476,18 +485,19 @@ footer p{max-width:860px}
 <!-- =============================== LIVE MARKET =============================== -->
 <section class="view" id="v-live" role="tabpanel" aria-label="Live market" hidden>
   <div class="v-head">
-    <p class="eyebrow">Live · Cboe delayed data</p>
-    <h1>SPX volatility, today</h1>
-    <p class="sub">The full S&amp;P&nbsp;500 option chain (about 29,000 contracts) turned into an implied-volatility surface, model-free implied moves and dealer-positioning scenarios — rebuilt every 30 minutes during US trading hours by a GitHub Action. Only derived analytics are published, never raw quotes.</p>
+    <p class="eyebrow">Live · Cboe delayed data · SPX &amp; NDX</p>
+    <h1>S&amp;P 500 &amp; Nasdaq-100 volatility, today</h1>
+    <p class="sub">The full S&amp;P&nbsp;500 and Nasdaq-100 option chains (about 29,000 and 15,000 contracts) turned into implied-volatility surfaces, model-free implied moves, the term structure with a calendar-arbitrage check, and dealer-positioning scenarios — rebuilt about every 15 minutes during US trading hours by a GitHub Action. Only derived analytics are published, never raw quotes.</p>
     <div class="btns" style="margin-top:14px"><span class="status" id="lvStatus"><i></i>loading…</span><span class="fn" id="lvAsof"></span><button type="button" class="btn btn-s btn-tonal" id="lvNew" hidden>New snapshot — reload</button></div>
   </div>
   <div id="lvEmpty" class="callout warn" hidden><p><b>Live data could not be loaded.</b> The page expects <code>data/live/latest.js</code>, written by <code>pipeline/live_snapshot.py</code>. Run the pipeline once, or wait for the scheduled GitHub Action.</p></div>
   <div id="lvBody">
+    <div class="ix-bar"><div class="seg lvIxSeg" role="group" aria-label="Index"><button type="button" data-v="SPX" aria-pressed="true">S&amp;P 500 · SPX</button><button type="button" data-v="NDX">Nasdaq-100 · NDX</button></div><span class="fn" id="lvIxNote">Everything below the history chart follows this switch.</span></div>
     <div class="stats" aria-live="polite">
-      <div class="stat"><div class="l">S&amp;P 500</div><div class="v" id="lvSpx">–</div><div class="s" id="lvSpxS">–</div></div>
+      <div class="stat"><div class="l" id="lvIdxL">S&amp;P 500</div><div class="v" id="lvSpx">–</div><div class="s" id="lvSpxS">–</div></div>
       <div class="stat"><div class="l" id="lvMoveL">Implied move, next expiry</div><div class="v" id="lvMove">–</div><div class="s" id="lvMoveS">model-free</div></div>
       <div class="stat"><div class="l">30-day implied vol</div><div class="v" id="lvV30">–</div><div class="s" id="lvV30S">my replication</div></div>
-      <div class="stat"><div class="l">Term structure</div><div class="v" id="lvTs">–</div><div class="s" id="lvTsS">VIX3M / VIX</div></div>
+      <div class="stat"><div class="l">Term structure</div><div class="v" id="lvTs">–</div><div class="s" id="lvTsS">–</div></div>
       <div class="stat"><div class="l">Zero-gamma level</div><div class="v" id="lvZg">–</div><div class="s" id="lvZgS">convention A</div></div>
       <div class="stat"><div class="l">Surface fit</div><div class="v" id="lvFit">–</div><div class="s" id="lvFitS">median SVI error</div></div>
     </div>
@@ -504,11 +514,11 @@ footer p{max-width:860px}
       <details class="tv"><summary>Data table</summary><div class="tbl"></div></details>
     </figure>
 
-    <h2>Implied volatility surface</h2>
+    <div class="h2-row"><h2 id="lv-surface">Implied volatility surface</h2><div class="seg lvIxSeg" role="group" aria-label="Index"><button type="button" data-v="SPX" aria-pressed="true">SPX</button><button type="button" data-v="NDX">NDX</button></div></div>
     <div>
       <div class="stage" id="lvStage">
-        <canvas tabindex="0" role="img" aria-label="3D implied volatility surface of SPX options by strike and expiry. Drag to rotate."></canvas>
-        <div class="stage-top"><div><b>SPX implied vol</b><br><span id="lvSurfSub">SVI fit per expiry · drawn only inside the quoted strike range</span></div></div>
+        <canvas tabindex="0" role="img" aria-label="3D implied volatility surface by strike and expiry. Drag to rotate."></canvas>
+        <div class="stage-top"><div><b id="lvSurfT">SPX implied vol</b><br><span id="lvSurfSub">SVI fit per expiry · drawn only inside the quoted strike range</span></div></div>
         <div class="hint3d">Drag to rotate · click, then scroll to zoom · double-click to reset</div>
         <div class="stage-tools"><button class="icon-btn" type="button" data-reset="lvStage" aria-label="Reset view">⟲</button></div>
       </div>
@@ -518,34 +528,50 @@ footer p{max-width:860px}
       <figure class="fig card pad-s" id="figLvSmile"><p class="fig-t">Smile: market vs. SVI fit</p><p class="fig-s" id="lvSmileSub">Bid–ask implied vol per strike (own Black-76 inversion) and the fitted SVI curve.</p>
         <div class="chips" id="lvExp" style="margin-bottom:10px"></div>
         <ul class="legend"><li><span class="key k-ref"></span>Bid–ask IV (market)</li><li><span class="key k-s1"></span>SVI fit</li></ul>
-        <div class="chart" data-label="Implied volatility smile of one SPX expiry: market bid-ask range and SVI fit."></div>
+        <div class="chart" data-label="Implied volatility smile of one expiry: market bid-ask range and SVI fit."></div>
         <p class="read" id="lvSmileRead"></p>
         <details class="tv"><summary>Data table</summary><div class="tbl"></div></details></figure>
       <div class="stack">
-        <div class="card pad-s"><p class="fig-t">Measurement check</p><p class="fig-s">My model-free replication from the chain, interpolated to the index tenors, vs. Cboe’s official indices.</p>
+        <div class="card pad-s"><p class="fig-t">Measurement check</p><p class="fig-s" id="lvCheckS">My model-free replication from the chain, interpolated to the index tenors, vs. Cboe’s official indices.</p>
           <div class="tbl" style="max-height:none"><table id="lvCheck"><thead><tr><th scope="col">Tenor</th><th scope="col" class="num">Mine</th><th scope="col" class="num">Cboe</th><th scope="col" class="num">Diff.</th></tr></thead><tbody></tbody></table></div>
           <p class="tiny" style="margin-top:8px">Same method as Research&nbsp;2’s validation gate. Differences come from snapshot timing (delayed feed vs. the 16:15 fixing), strike selection and the rate input.</p></div>
-        <figure class="fig card pad-s" id="figLvTerm"><p class="fig-t">ATM term structure</p><p class="fig-s">At-the-money implied vol (SVI) by days to expiry.</p>
-          <div class="chart" data-label="At-the-money implied volatility by days to expiry."></div><details class="tv"><summary>Data table</summary><div class="tbl"></div></details></figure>
+        <div class="card pad-s"><p class="fig-t">What the amber line on the surface is</p><p class="fn" style="margin:0">The at-the-money line (strike = forward) across all expiries — the ATM term structure. Its slope is contango (rising) or backwardation (falling), analysed below.</p></div>
       </div>
     </div>
 
-    <h2>VIX term structure</h2>
-    <div class="grid-2">
-      <figure class="fig card pad-s" id="figLvCurve"><p class="fig-t">Today</p><p class="fig-s">Cboe volatility indices by tenor.</p>
-        <div class="chart" data-label="Today's VIX term structure."></div><details class="tv"><summary>Data table</summary><div class="tbl"></div></details></figure>
-      <figure class="fig card pad-s" id="figLvHist"><p class="fig-t">Last 12 months</p><p class="fig-s">Daily closes.</p>
-        <ul class="legend"><li><span class="key k-s1"></span>VIX1D</li><li><span class="key k-s2"></span>VIX9D</li><li><span class="key k-s3"></span>VIX</li><li><span class="key k-s4"></span>VIX3M</li></ul>
-        <div class="chart" data-label="VIX1D, VIX9D, VIX and VIX3M over the last year."></div><details class="tv"><summary>Data table</summary><div class="tbl"></div></details></figure>
+    <h2 id="lv-term">Term structure: contango, backwardation, calendar arbitrage</h2>
+    <p class="sub" style="margin-bottom:14px">Contango — longer-dated options carry more implied vol than shorter ones — is the calm-market norm; backwardation (front above back) marks stress or an event close ahead. Neither is an arbitrage. That only arises if total implied variance w = σ²·T falls with maturity: then a calendar spread (sell the front, buy the back) would cost less than nothing.</p>
+    <div class="stats" aria-live="polite" style="margin-bottom:14px">
+      <div class="stat"><div class="l">3 months ÷ 1 month</div><div class="v" id="tmState">–</div><div class="s" id="tmStateS">model-free vol</div></div>
+      <div class="stat"><div class="l">9 days ÷ 1 month</div><div class="v" id="tmFront">–</div><div class="s" id="tmFrontS">the front of the curve</div></div>
+      <div class="stat"><div class="l">Calendar check, fitted smiles</div><div class="v" id="tmCal">–</div><div class="s" id="tmCalS">–</div></div>
+      <div class="stat"><div class="l">Negative forward variance at the money</div><div class="v" id="tmFwd">–</div><div class="s" id="tmFwdS">consecutive expiries</div></div>
     </div>
+    <div class="grid-2">
+      <figure class="fig card pad-s" id="figLvTerm"><p class="fig-t">Implied vol by expiry — spot and forward</p><p class="fig-s">ATM vol (SVI) and model-free vol to each expiry; the steps are the forward vol between two consecutive expiries, √((w₂ − w₁) ÷ (T₂ − T₁)). Square-root time axis. Between neighbouring daily expiries a step isolates a single day: time runs in calendar days, so a Friday → Monday step spreads one session over three days and comes out low, and small fit errors are magnified — read the front steps as noisy.</p>
+        <ul class="legend"><li><span class="key k-s1"></span>ATM vol to expiry</li><li><span class="key k-s3"></span>Model-free vol to expiry</li><li><span class="key k-s2"></span>Forward vol between expiries</li><li><span class="key rect k-neg"></span>Negative forward variance</li></ul>
+        <div class="chart" data-label="Implied volatility by expiry and forward volatility between consecutive expiries."></div><details class="tv"><summary>Data table</summary><div class="tbl"></div></details></figure>
+      <figure class="fig card pad-s" id="figLvCurve"><p class="fig-t">Today’s curve at fixed tenors</p><p class="fig-s" id="lvCurveS">My model-free vol interpolated to fixed tenors (the VIX method) and Cboe’s own indices.</p>
+        <ul class="legend"><li><span class="key k-s1"></span>Model-free, from the chain</li><li><span class="key rect k-s2" style="border-radius:50%"></span>Cboe index</li></ul>
+        <div class="chart" data-label="Today's implied volatility term structure at fixed tenors."></div><details class="tv"><summary>Data table</summary><div class="tbl"></div></details></figure>
+    </div>
+    <div class="grid-2" style="margin-top:18px">
+      <div class="card pad-s"><p class="fig-t">Calendar check — where fitted smiles cross</p><p class="fig-s" id="lvCalS">Consecutive expiries, compared at the same forward log-moneyness on the strikes both quote.</p>
+        <div class="tbl" style="max-height:300px"><table id="lvCal"><thead><tr><th scope="col">Front → back</th><th scope="col" class="num">Strike (K/F)</th><th scope="col" class="num">Size</th><th scope="col" class="num">Fit RMSE</th><th scope="col">Verdict</th></tr></thead><tbody></tbody></table></div>
+        <p class="tiny" style="margin-top:8px">Size: how many vol points the back expiry’s IV at that strike would have to rise for w to stop falling. A violation smaller than the two fits’ own RMSE cannot be told apart from fit noise; even larger ones are rarely tradable once bid–ask spreads are paid.</p></div>
+      <figure class="fig card pad-s" id="figLvHist"><p class="fig-t">Last 12 months</p><p class="fig-s" id="lvHistS">Daily closes of Cboe’s volatility indices.</p>
+        <ul class="legend" id="lvHistLeg"></ul>
+        <div class="chart" data-label="Cboe volatility indices over the last year."></div><details class="tv"><summary>Data table</summary><div class="tbl"></div></details></figure>
+    </div>
+    <div class="callout" style="margin-top:16px"><p><b>Calendar spreads and the curve.</b> A long calendar sells the front expiry and buys the back one at the same strike: long vega, short the front’s faster time decay. In contango it pays the richer back-month vol; in backwardation it sells the richer front — it then gains if the curve normalizes and loses if the stress persists. Try both in the <button type="button" class="linkish" data-go="greeks">Options &amp; Greeks</button> tool: pick “Calendar” and move the term-structure slider until the calendar check turns red.</p></div>
 
     <h2>Dealer gamma — two assumptions</h2>
     <p class="sub" style="margin-bottom:14px">Open interest does not say who is long. Under convention A dealers are long calls and short puts; under B they are short everything. Same data, opposite conclusions — that is the identification problem, made visible.</p>
     <div class="grid-2">
-      <figure class="fig card pad-s" id="figLvGex"><p class="fig-t">Total gamma exposure across spot</p><p class="fig-s">Σ Γ × open interest × 100 × S² × 1 % — $ billions per 1 % move, all expiries (SPX and SPXW), sticky-strike vols.</p>
+      <figure class="fig card pad-s" id="figLvGex"><p class="fig-t">Total gamma exposure across spot</p><p class="fig-s" id="lvGexS">Σ Γ × open interest × 100 × S² × 1 % — $ billions per 1 % move, all expiries, sticky-strike vols.</p>
         <ul class="legend"><li><span class="key k-s1"></span>A · long calls, short puts</li><li><span class="key k-s2"></span>B · short all options</li></ul>
         <div class="chart" data-label="Dealer gamma exposure across hypothetical spot levels under two conventions."></div><details class="tv"><summary>Data table</summary><div class="tbl"></div></details></figure>
-      <figure class="fig card pad-s" id="figLvStrike"><p class="fig-t">Gamma exposure by strike (convention A)</p><p class="fig-s">$ billions per 1 % move at today’s spot, 25-point strike bins, all expiries.</p>
+      <figure class="fig card pad-s" id="figLvStrike"><p class="fig-t">Gamma exposure by strike (convention A)</p><p class="fig-s" id="lvStrikeS">$ billions per 1 % move at today’s spot, all expiries.</p>
         <ul class="legend"><li><span class="key rect k-s1"></span>Long gamma</li><li><span class="key rect k-neg"></span>Short gamma</li></ul>
         <div class="chart" data-label="Dealer gamma exposure by strike under convention A."></div><details class="tv"><summary>Data table</summary><div class="tbl"></div></details></figure>
     </div>
@@ -560,12 +586,12 @@ footer p{max-width:860px}
       <details class="tv"><summary>Data table</summary><div class="tbl"></div></details>
     </figure>
 
-    <details class="more card pad-s" style="margin-top:22px"><summary>All expiries — forward, rates, fit quality</summary>
+    <details class="more card pad-s" style="margin-top:22px"><summary id="lvExpSum">All expiries — forward, rates, fit quality</summary>
       <div class="tbl" style="max-height:420px;margin-top:12px"><table id="lvExpTable"><thead><tr><th scope="col">Expiry</th><th scope="col">Settle</th><th scope="col" class="num">Days</th><th scope="col" class="num">Forward</th><th scope="col" class="num">r</th><th scope="col" class="num">q</th><th scope="col" class="num">ATM IV</th><th scope="col" class="num">Implied move</th><th scope="col" class="num">Straddle</th><th scope="col" class="num">SVI RMSE</th><th scope="col" class="num">In bid–ask</th><th scope="col">Butterfly</th></tr></thead><tbody></tbody></table></div>
       <p class="tiny" style="margin-top:8px">Forward and discount factor from a put–call-parity regression on the strikes nearest the money; r and q shown from 30 days (shorter maturities do not identify the rate). Implied move = √(model-free total variance to expiry); straddle ≈ √(2/π)·σ√T·F.</p>
     </details>
 
-    <div class="callout" style="margin-top:18px"><p><b>What this is:</b> Cboe’s delayed quotes (about 15 minutes), rebuilt every 30 minutes in trading hours. Implied vols are my own Black-76 inversions of mid quotes on the parity forward; time runs in calendar minutes as in the VIX, so a Monday expiry seen on Friday includes the weekend. Open interest is the prior day’s (OCC). <b>What it is not:</b> a trading signal — the dealer-gamma panels depend on an unverifiable sign assumption.</p></div>
+    <div class="callout" style="margin-top:18px"><p><b>What this is:</b> Cboe’s delayed quotes (about 15 minutes), rebuilt about every 15 minutes in trading hours. Implied vols are my own Black-76 inversions of mid quotes on the parity forward; time runs in calendar minutes as in the VIX, so a Monday expiry seen on Friday includes the weekend. Open interest is the prior day’s (OCC). The Nasdaq-100 chain is thinner than the S&amp;P 500’s, so its fits are noisier and its dealer-gamma totals far smaller. <b>What it is not:</b> a trading signal — the dealer-gamma panels depend on an unverifiable sign assumption.</p></div>
   </div>
 </section>
 
@@ -870,10 +896,11 @@ footer p{max-width:860px}
       <div><p class="group-t">Market</p><div class="group">
         <div class="row"><div class="row-h"><label for="gkS">Spot</label><output for="gkS"></output></div><input id="gkS" type="range" min="60" max="140" step="0.5" value="100"></div>
         <div class="row"><div class="row-h"><label for="gkV">Implied vol</label><output for="gkV"></output></div><input id="gkV" type="range" min="5" max="100" step="1" value="20"></div>
+        <div class="row"><div class="row-h"><label for="gkTS">Term structure: back − front vol</label><output for="gkTS"></output></div><input id="gkTS" type="range" min="-30" max="15" step="0.5" value="0"><p class="hint" id="gkTSHint"></p></div>
         <div class="row"><div class="row-h"><label for="gkR">Rate r</label><output for="gkR"></output></div><input id="gkR" type="range" min="0" max="10" step="0.25" value="4"></div>
         <div class="row"><div class="row-h"><label for="gkQ">Dividend yield q</label><output for="gkQ"></output></div><input id="gkQ" type="range" min="0" max="8" step="0.1" value="1.3"></div>
         <div class="row"><div class="row-h"><label for="gkT">Days elapsed</label><output for="gkT"></output></div><input id="gkT" type="range" min="0" max="30" step="1" value="0"></div>
-      </div><p class="tiny" style="margin:8px 14px 0">Premiums are fixed when a leg is set (spot 100, current vol); moving spot, vol or time then shows the P&amp;L.</p></div>
+      </div><p class="tiny" style="margin:8px 14px 0">Premiums are fixed when a leg is set (spot 100, current vol and term structure); moving spot, vol, the term structure or time then shows the P&amp;L.</p></div>
       <div><p class="group-t">Surface</p><div class="group">
         <div class="row"><label class="fn" for="gkZ" style="display:block;margin-bottom:6px">Quantity</label><select id="gkZ"></select></div>
         <div class="row"><div class="seg" id="gkY" role="group" aria-label="Second axis"><button type="button" data-v="iv" aria-pressed="true">Spot × vol</button><button type="button" data-v="t">Spot × time</button></div></div>
@@ -1959,11 +1986,42 @@ class Surface3D {
       polys.push({ pts, dep, i, j, rgb: cmap(d.cmap, t), sh: 0.62 + 0.38 * lam, flag: d.flag && d.flag[j * (nx - 1) + i] });
     }
     polys.sort((p, q) => q.dep - p.dep);
-    for (const p of polys) {
+    // overlays: a curve at constant x (e.g. today's spot, the ATM line) and point markers. Each piece lies inside one
+    // grid cell and is drawn right after that cell, so nearer parts of the surface still hide it (painter's order).
+    const ovl = new Map(), items = [], addO = (cell, f, mid, halo) => { const it = { f, mid, halo, q: -1 }; items.push(it); if (!ovl.has(cell)) ovl.set(cell, []); ovl.get(cell).push(it); };
+    const cellX = xv => { if (!(xv >= x[0] && xv <= x[nx - 1])) return -1; let i = 0; while (i < nx - 2 && x[i + 1] < xv) i++; return i; };
+    const cellY = yv => { if (!(yv >= y[0] && yv <= y[ny - 1])) return -1; let j = 0; while (j < ny - 2 && y[j + 1] < yv) j++; return j; };
+    const zBil = (i, j, fx, fy) => { const a = z[j * nx + i], b = z[j * nx + i + 1], c = z[(j + 1) * nx + i], e = z[(j + 1) * nx + i + 1]; return [a, b, c, e].every(isFinite) ? (a * (1 - fx) + b * fx) * (1 - fy) + (c * (1 - fx) + e * fx) * fy : NaN; };
+    const OC = '#ffb340';
+    for (const cv of d.curves || []) {
+      const i = cellX(cv.x); if (i < 0) continue; const fx = (cv.x - x[i]) / (x[i + 1] - x[i]);
+      let last = null;
+      for (let j = 0; j < ny - 1; j++) {
+        const za = zBil(i, j, fx, 0), zb = zBil(i, j, fx, 1); if (!isFinite(za) || !isFinite(zb)) continue;
+        const A = P(X(cv.x), Y(y[j]), Z(za)), B2 = P(X(cv.x), Y(y[j + 1]), Z(zb));
+        addO(j * (nx - 1) + i, () => { ctx.lineCap = 'round'; line(A, B2, cv.color || OC, 2.2); }, [(A[0] + B2[0]) / 2, (A[1] + B2[1]) / 2], () => { ctx.lineCap = 'round'; line(A, B2, 'rgba(0,0,0,0.6)', 4.5); });
+        last = { cell: j * (nx - 1) + i, p: B2 };
+      }
+      if (last && cv.label) addO(last.cell, () => { ctx.font = '600 11.5px ' + getComputedStyle(document.body).fontFamily; ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,0.75)'; ctx.strokeText(cv.label, last.p[0] + 8, last.p[1] - 8); ctx.fillStyle = cv.color || OC; ctx.fillText(cv.label, last.p[0] + 8, last.p[1] - 8); }, last.p);
+    }
+    for (const mk of d.markers || []) {
+      const i = cellX(mk.x), j = cellY(mk.y); if (i < 0 || j < 0) continue;
+      const zv = zBil(i, j, (mk.x - x[i]) / (x[i + 1] - x[i]), (mk.y - y[j]) / (y[j + 1] - y[j])); if (!isFinite(zv)) continue;
+      const pt = P(X(mk.x), Y(mk.y), Z(zv));
+      addO(j * (nx - 1) + i, () => { ctx.beginPath(); ctx.arc(pt[0], pt[1], 5.5, 0, 2 * Math.PI); ctx.fillStyle = mk.color || OC; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = '#161618'; ctx.stroke(); }, pt);
+    }
+    polys.forEach((p, pq) => {
       let [r, g, b] = p.rgb; if (p.flag) { r = r * 0.35 + 208 * 0.65; g = g * 0.35 + 59 * 0.65; b = b * 0.35 + 59 * 0.65; }
       ctx.fillStyle = `rgb(${r * p.sh | 0},${g * p.sh | 0},${b * p.sh | 0})`;
       ctx.beginPath(); ctx.moveTo(p.pts[0][0], p.pts[0][1]); for (let q = 1; q < 4; q++) ctx.lineTo(p.pts[q][0], p.pts[q][1]); ctx.closePath();
       ctx.fill(); ctx.strokeStyle = 'rgba(0,0,0,0.22)'; ctx.lineWidth = 0.6; ctx.stroke();
+      const o = ovl.get(p.j * (nx - 1) + p.i); if (o) { o.forEach(it => { if (it.halo) it.halo(); }); o.forEach(it => { it.f(); it.q = pq; }); }
+    });
+    // second pass: overlay pieces that no later (nearer) cell covers are redrawn on top, so grid edges do not cut them
+    if (items.length) {
+      const inQ = (px, py, pts) => { let ins = false; for (let a = 0, b = 3; a < 4; b = a++) { if ((pts[a][1] > py) !== (pts[b][1] > py) && px < (pts[b][0] - pts[a][0]) * (py - pts[a][1]) / (pts[b][1] - pts[a][1]) + pts[a][0]) ins = !ins; } return ins; };
+      const vis = items.filter(it => { if (it.q < 0) return false; for (let q = it.q + 1; q < polys.length; q++) if (inQ(it.mid[0], it.mid[1], polys[q].pts)) return false; return true; });
+      vis.forEach(it => { if (it.halo) it.halo(); }); vis.forEach(it => { if (it.halo) it.f(); }); vis.forEach(it => { if (!it.halo) it.f(); });   // all halos, then lines, then dot and label
     }
     if (this.hov >= 0 && polys[this.hov]) { const p = polys[this.hov]; ctx.beginPath(); ctx.moveTo(p.pts[0][0], p.pts[0][1]); for (let q = 1; q < 4; q++) ctx.lineTo(p.pts[q][0], p.pts[q][1]); ctx.closePath(); ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.6; ctx.stroke(); }
     this.polys = polys;
@@ -2188,14 +2246,18 @@ INITS.greeks = () => {
   { const c = document.createElement('option'); c.value = ''; c.textContent = 'Custom position'; stratSel.append(c); let og = null;
     STRATS.forEach(([g, n]) => { if (!og || og.label !== g) { og = document.createElement('optgroup'); og.label = g; stratSel.append(og); } const o = document.createElement('option'); o.value = n; o.textContent = n; og.append(o); }); }
   const zSel = $('gkZ'); Object.entries(META).forEach(([k, m]) => { const o = document.createElement('option'); o.value = k; o.textContent = m.n + (k === 'pnl' ? '' : ' · ' + m.u); zSel.appendChild(o); });
+  const TS_ = range('gkTS', v => (v > 0 ? '+' : v < 0 ? '−' : '±') + Math.abs(v) + ' pts');
   const S_ = range('gkS', v => v.toFixed(1)), V_ = range('gkV', v => v + ' %'), R_ = range('gkR', v => v.toFixed(2) + ' %'), Q_ = range('gkQ', v => v.toFixed(1) + ' %'), T_ = range('gkT', v => v + ' d');
   const yAxis = segmented('gkY', () => upd());
   const s3 = new Surface3D($('gkStage'), { yaw: -0.5, pitch: 0.45 }); document.querySelector('[data-reset="gkStage"]')._s3d = s3;
   let legs = [];
   const mk = () => ({ r: R_.value / 100, q: Q_.value / 100 });
-  const price = l => l.type === 'U' ? S_REF : bsAll(S_REF, l.K, V_.value / 100, l.dte / 365, mk().r, mk().q, l.type === 'C').price;
   const optLegs = () => legs.filter(l => l.type !== 'U');
-  const setLegs = arr => { legs = arr.map(([side, type, K, qty, dte]) => { const l = { side, type, K, qty, dte }; l.prem = price(l); return l; }); renderLegs(); };
+  // term structure (sticky expiry): legs on the first expiry carry the implied vol, later expiries vol + spread
+  const frontD = () => { const o = optLegs(); return o.length ? Math.min(...o.map(l => l.dte)) : 0; };
+  const legSig = (l, sig) => (l.dte > frontD() ? Math.max(0.01, sig + TS_.value / 100) : sig);
+  const price = l => l.type === 'U' ? S_REF : bsAll(S_REF, l.K, legSig(l, V_.value / 100), l.dte / 365, mk().r, mk().q, l.type === 'C').price;
+  const setLegs = arr => { legs = arr.map(([side, type, K, qty, dte]) => ({ side, type, K, qty, dte })); legs.forEach(l => { l.prem = price(l); }); renderLegs(); };
   const pick = n => { const s = STRATS.find(x => x[1] === n); if (!s) return; stratSel.value = n; $('gkDesc').textContent = s[3]; setLegs(s[2]); };
   stratSel.addEventListener('change', () => { if (stratSel.value) pick(stratSel.value); });
   const clearPre = () => { stratSel.value = ''; $('gkDesc').textContent = 'Custom position — edit the legs below.'; };
@@ -2222,8 +2284,8 @@ INITS.greeks = () => {
     const maxD = Math.max(1, ...optLegs().map(l => l.dte)); T_.max = maxD; if (+T_.value > maxD) T_.value = maxD; T_._upd();
     upd();
   }
-  $('gkAdd').addEventListener('click', () => { const l = { side: 1, type: 'C', K: 100, qty: 1, dte: 30 }; l.prem = price(l); legs.push(l); clearPre(); renderLegs(); });
-  const val = (S, sig, t, key) => { let v = 0; const { r, q } = mk(); for (const l of legs) { if (l.type === 'U') { v += l.side * l.qty * MULT * (key === 'pnl' ? S - l.prem : key === 'delta' ? 1 : 0); continue; } const T = Math.max(l.dte - t, 0) / 365, g = bsAll(S, l.K, sig, T, r, q, l.type === 'C'); v += l.side * l.qty * MULT * (key === 'pnl' ? g.price - l.prem : g[key] * META[key].k); } return v; };
+  $('gkAdd').addEventListener('click', () => { const l = { side: 1, type: 'C', K: 100, qty: 1, dte: 30 }; legs.push(l); l.prem = price(l); clearPre(); renderLegs(); });
+  const val = (S, sig, t, key) => { let v = 0; const { r, q } = mk(); for (const l of legs) { if (l.type === 'U') { v += l.side * l.qty * MULT * (key === 'pnl' ? S - l.prem : key === 'delta' ? 1 : 0); continue; } const T = Math.max(l.dte - t, 0) / 365, g = bsAll(S, l.K, legSig(l, sig), T, r, q, l.type === 'C'); v += l.side * l.qty * MULT * (key === 'pnl' ? g.price - l.prem : g[key] * META[key].k); } return v; };
   const fmtV = (v, key) => key === 'pnl' ? money(v) : fmtSig(v, 4);
   const payX = Array.from({ length: 161 }, (_, i) => 60 + i * 0.5);
   const pay = lineChart('figPayoff', { xs: payX, series: [{ v: [], cls: 's1', label: 'now' }, { v: [], cls: 's2', label: 'at first expiry' }], xTitle: 'Spot', yFmt: v => minus(Math.round(v).toLocaleString('en-US')), tipX: x => 'Spot ' + x.toFixed(1), fmt: v => money(v), height: 240, m: { l: 58 }, baseline: 0,
@@ -2249,10 +2311,26 @@ INITS.greeks = () => {
     const z = new Float64Array(NX * NY);
     for (let j = 0; j < NY; j++) for (let i = 0; i < NX; i++) z[j * NX + i] = yv === 'iv' ? val(xs[i], ys[j] / 100, t, key) : val(xs[i], sig, ys[j], key);
     const yT = yv === 'iv' ? [5, 20, 40, 60, 80].map(v => ({ v, t: v + '%' })) : ticks(0, ys[NY - 1], 4).map(v => ({ v, t: v + 'd' }));
-    s3.set({ nx: NX, ny: NY, x: xs, y: ys, z, cmap: 'div', xTicks: [60, 80, 100, 120, 140].map(v => ({ v, t: String(v) })), yTicks: yT, zFmt: v => key === 'pnl' ? minus(Math.round(v).toLocaleString('en-US')) : fmtSig(v, 3), labels: { x: 'Spot', y: yv === 'iv' ? 'Implied vol' : 'Days elapsed', z: META[key].n },
+    s3.set({ nx: NX, ny: NY, x: xs, y: ys, z, cmap: 'div', curves: [{ x: S0, label: 'spot ' + S0.toFixed(1) }], markers: [{ x: S0, y: yv === 'iv' ? +V_.value : t }], xTicks: [60, 80, 100, 120, 140].map(v => ({ v, t: String(v) })), yTicks: yT, zFmt: v => key === 'pnl' ? minus(Math.round(v).toLocaleString('en-US')) : fmtSig(v, 3), labels: { x: 'Spot', y: yv === 'iv' ? 'Implied vol' : 'Days elapsed', z: META[key].n },
       hover: (i, j) => [`Spot ${xs[i].toFixed(0)} · ${yv === 'iv' ? 'vol ' + ys[j].toFixed(1) + ' %' : 'day ' + ys[j].toFixed(1)}`, [META[key].n + (key === 'pnl' ? '' : ' (' + META[key].u + ')'), fmtV(z[j * NX + i], key)]] });
     $('gkTitle').textContent = META[key].n + (key === 'pnl' ? '' : ' · ' + META[key].u);
-    $('gkSub').textContent = yv === 'iv' ? `Spot × implied vol · day ${t}` : `Spot × time · vol ${V_.value} %`;
+    $('gkSub').textContent = (yv === 'iv' ? `Spot × implied vol · day ${t}` : `Spot × time · vol ${V_.value} %`) + ` · amber line: spot ${S0.toFixed(1)}, dot: now${yv === 'iv' && +V_.value > 80 ? ' (vol above the axis)' : ''}`;
+    // term structure and the calendar-arbitrage bound
+    const ol = optLegs(), fd = frontD(), backs = [...new Set(ol.filter(l => l.dte > fd).map(l => l.dte))].sort((a, b) => a - b), h = $('gkTSHint');
+    if (!backs.length) { h.className = 'hint'; h.textContent = 'Only one expiry in this position — the term structure does not change it. It matters for calendars and diagonals: legs after the first expiry get the implied vol plus this spread.'; }
+    else {
+      const Tf = Math.max(fd - t, 0) / 365, sf = sig, lines = [];
+      let arb = false;
+      for (const bd of backs) {
+        const Tb = Math.max(bd - t, 0) / 365, sb = Math.max(0.01, sig + TS_.value / 100), wf = sf * sf * Tf, wb = sb * sb * Tb, lim = Tb > 0 ? sf * Math.sqrt(Tf / Tb) : NaN;
+        if (wb < wf - 1e-12) arb = true;
+        lines.push(`front ${fd - t} d at ${(sf * 100).toFixed(1)} % (w = ${wf.toFixed(4)}) vs. back ${bd - t} d at ${(sb * 100).toFixed(1)} % (w = ${wb.toFixed(4)}); the back vol may fall to ${(lim * 100).toFixed(1)} % before w decreases`);
+      }
+      const st = TS_.value > 0 ? 'Contango' : TS_.value < 0 ? 'Backwardation' : 'Flat term structure';
+      h.className = 'hint ' + (arb ? 'ts-bad' : 'ts-ok');
+      h.textContent = arb ? `✗ Calendar arbitrage: total variance w = σ²T falls from the front to the back expiry — ${lines.join('; ')}. A calendar at the same forward moneyness would cost less than nothing.`
+        : `✓ ${st}, no calendar arbitrage: ${lines.join('; ')}.${TS_.value < 0 ? ' Backwardation alone is not an arbitrage — only a falling w is.' : ''}`;
+    }
     let lo = Infinity, hi = -Infinity; for (const v of z) { lo = Math.min(lo, v); hi = Math.max(hi, v); }
     colorbar('gkBar', 'div', lo, hi, v => fmtV(v, key), META[key].n);
     // 2D profile
@@ -2263,8 +2341,8 @@ INITS.greeks = () => {
       let worst = 0, live = 0;
       for (const l of optLegs()) {
         const T = (l.dte - t) / 365; if (T <= 0) continue; live++;
-        const a = bsAll(S0, l.K, sig, T, r, q, l.type === 'C')[key2], f = fdCheck(key2, S0, l.K, sig, T, r, q, l.type === 'C');
-        let sc = 0; for (let s = 0.8 * S0; s <= 1.2 * S0 + 1e-9; s += 0.05 * S0) sc = Math.max(sc, Math.abs(bsAll(s, l.K, sig, T, r, q, l.type === 'C')[key2]));
+        const sl = legSig(l, sig), a = bsAll(S0, l.K, sl, T, r, q, l.type === 'C')[key2], f = fdCheck(key2, S0, l.K, sl, T, r, q, l.type === 'C');
+        let sc = 0; for (let s = 0.8 * S0; s <= 1.2 * S0 + 1e-9; s += 0.05 * S0) sc = Math.max(sc, Math.abs(bsAll(s, l.K, sl, T, r, q, l.type === 'C')[key2]));
         worst = Math.max(worst, Math.abs(a - f) / (sc || 1));
       }
       const tr = tb.insertRow(); tr.insertCell().textContent = META[key2].n;
@@ -2276,7 +2354,7 @@ INITS.greeks = () => {
     }
   }
   const later = (() => { let r = 0; return () => { if (!r) r = requestAnimationFrame(() => { r = 0; upd(); }); }; })();
-  [S_, T_, R_, Q_].forEach(el => el.addEventListener('input', later));
+  [S_, T_, R_, Q_, TS_].forEach(el => el.addEventListener('input', later));
   V_.addEventListener('input', later);
   zSel.addEventListener('change', upd);
   pick('Long straddle');
@@ -2603,134 +2681,190 @@ function renderStrip(d) {
   const tile = (l, v, c, key) => { const t = document.createElement('button'); t.type = 'button'; t.className = 'tk'; t.title = 'Show history & live chart'; t.addEventListener('click', () => { HL_SEL = key; if (window.__hlSet) window.__hlSet(key); go('live', 'hl'); }); const a = document.createElement('div'); a.className = 'l'; a.textContent = l; const b = document.createElement('div'); b.className = 'v'; b.textContent = v; t.append(a, b); if (c) t.append(c); row.append(t); };
   tile('S&P 500', num(d.spot.level), chgSpan(d.spot.change_pct, 2, ' %'), 'SPX');
   for (const k of ['VIX1D', 'VIX9D', 'VIX', 'VIX3M', 'VVIX']) if (d.vix[k]) tile(k, num(d.vix[k].level), chgSpan(d.vix[k].change), k);
+  if (d.vix.NDX) { const n = d.vix.NDX, prev = n.level - n.change; tile('Nasdaq-100', num(n.level), chgSpan(prev ? n.change / prev * 100 : 0, 2, ' %'), 'NDX'); }
+  if (d.vix.VXN) tile('VXN', num(d.vix.VXN.level), chgSpan(d.vix.VXN.change), 'VXN');
   if (e0 && e0.rep_move) { const c = document.createElement('div'); c.className = 'c'; c.style.color = 'var(--text3)'; c.textContent = 'to ' + fmtExp(e0.expiry); tile('Implied move', '±' + (e0.rep_move * 100).toFixed(2) + ' %', c, 'move'); }
 }
 LIVE.on(renderStrip); LIVE.watch(renderStrip);
 
-/* ---------- live market tab ---------- */
+/* ---------- live market tab: SPX or NDX chain analytics (NDX file loaded on demand) ---------- */
+const NDXD = { data: undefined, q: [], loading: false, on(fn) { if (this.data !== undefined) fn(this.data); else { this.q.push(fn); this.load(); } },
+  load() { if (this.loading) return; this.loading = true; const s = document.createElement('script'); s.src = 'data/live/ndx.js?v=' + Math.floor(Date.now() / 300000);
+    const done = d => { this.data = d; this.q.splice(0).forEach(f => f(d)); }; s.onload = () => done(window.__NDX__ || null); s.onerror = () => done(null); document.head.appendChild(s); } };
 INITS.live = () => LIVE.on(d => {
   if (!d) { $('lvEmpty').hidden = false; $('lvBody').hidden = true; $('lvStatus').textContent = 'unavailable'; return; }
   liveStatus($('lvStatus'), $('lvAsof'), d);
   $('lvNew').addEventListener('click', () => location.reload());
   LIVE.watch(nd => { const b = $('lvNew'); b.hidden = false; b.textContent = `New snapshot (${fmtET(new Date(nd.meta.valuation_time_et), false)} ET) — reload`; });
   initHL(d);
-  const S0 = d.spot.level, E = d.expiries, e0 = E[0], byDate = Object.fromEntries(E.map(e => [e.expiry, e]));
+  const CFG = {
+    SPX: { ix: 'SPX', name: 'S&P 500', v30: 'VIX', roots: 'SPX and SPXW', cboe: [['VIX1D', 1], ['VIX9D', 9], ['VIX', 30], ['VIX3M', 93]], hist: [['VIX1D', 's1'], ['VIX9D', 's2'], ['VIX', 's3'], ['VIX3M', 's4']] },
+    NDX: { ix: 'NDX', name: 'Nasdaq-100', v30: 'VXN', roots: 'NDX and NDXP', cboe: [['VXN', 30]], hist: [['VXN', 's1']] },
+  };
+  let D = d, C = CFG.SPX;
   const sviW = (p, k) => p[0] + p[1] * (p[2] * (k - p[3]) + Math.sqrt((k - p[3]) ** 2 + p[4] * p[4]));
-  // stats
-  $('lvSpx').textContent = num(S0); $('lvSpxS').replaceChildren(chgSpan(d.spot.change_pct, 2, ' %'), document.createTextNode(' on the day'));
-  $('lvMoveL').textContent = 'Implied move to ' + fmtExp(e0.expiry);
-  $('lvMove').textContent = '±' + (e0.rep_move * 100).toFixed(2) + ' %';
-  $('lvMoveS').textContent = `±${Math.round(S0 * e0.rep_move)} pts · model-free (straddle ±${(e0.straddle_move * 100).toFixed(2)} %)`;
-  const c30 = d.checks.replication_vs_cboe.find(x => x.index === 'VIX');
-  if (c30) { $('lvV30').textContent = c30.mine.toFixed(2) + ' %'; $('lvV30S').textContent = `my replication · VIX ${c30.cboe.toFixed(2)}`; }
-  const sl = d.vix.VIX3M.level / d.vix.VIX.level;
-  $('lvTs').textContent = sl.toFixed(2) + '×'; $('lvTsS').textContent = 'VIX3M / VIX · ' + (sl >= 1 ? 'contango (calm)' : 'backwardation (stress)');
-  const zg = d.gex.zero_gamma_A;
-  $('lvZg').textContent = zg ? num(zg, 0) : 'none'; $('lvZgS').textContent = zg ? `${minus(((zg / S0 - 1) * 100).toFixed(1))} % from spot · convention A` : 'no sign change in range';
-  const rm = E.filter(e => e.days <= 400).map(e => e.fit_rmse).sort((a, b) => a - b), med = rm[Math.floor(rm.length / 2)];
-  $('lvFit').textContent = (med * 100).toFixed(2) + ' vol pts'; $('lvFitS').textContent = `median SVI RMSE · ${E.length} expiries · ${d.checks.butterfly_violations ? d.checks.butterfly_violations + ' butterfly flags' : 'no butterfly arbitrage'}`;
-
-  // 3D surface
-  const sf = d.surface, NX = sf.kf.length, NY = sf.expiry.length;
-  const xs = Float64Array.from(sf.kf), ys = Float64Array.from(sf.T, t => Math.sqrt(t)), z = new Float64Array(NX * NY);
-  for (let j = 0; j < NY; j++) for (let i = 0; i < NX; i++) { const v = sf.iv[j][i]; z[j * NX + i] = v == null ? NaN : v; }
   const s3 = new Surface3D($('lvStage'), { yaw: -0.55, pitch: 0.5 }); document.querySelector('[data-reset="lvStage"]')._s3d = s3;
-  const maxDays = Math.max(...sf.days);
-  const yT = [[7, '1w'], [30, '1m'], [91, '3m'], [182, '6m'], [365, '1y']].filter(([dd]) => dd <= maxDays + 5).map(([dd, t]) => ({ v: Math.sqrt(dd / 365), t }));
-  s3.set({ nx: NX, ny: NY, x: xs, y: ys, z, cmap: 'seq', xTicks: [80, 85, 90, 95, 100, 105, 110].map(v => ({ v, t: v + '%' })), yTicks: yT, zFmt: v => v.toFixed(0) + '%', labels: { x: 'Strike K/F', y: 'Expiry', z: 'IV' },
-    hover: (i, j) => { const e = byDate[sf.expiry[j]]; return [`${fmtExp(sf.expiry[j])} (${sf.days[j]} d) · K/F ${xs[i].toFixed(0)} %`, ['implied vol', isFinite(z[j * NX + i]) ? z[j * NX + i].toFixed(2) + ' %' : '–'], ['strike ≈', num(e.F * xs[i] / 100, 0)], ['SVI RMSE', (e.fit_rmse * 100).toFixed(2) + ' vol pts']]; } });
-  let lo = Infinity, hi = -Infinity; for (const v of z) if (isFinite(v)) { lo = Math.min(lo, v); hi = Math.max(hi, v); }
-  colorbar('lvBar', 'seq', lo, hi, v => v.toFixed(1) + ' %', 'Implied vol');
-  $('lvSurfSub').textContent = `SVI fit per expiry · ${NY} expiries up to ${maxDays} days · drawn only inside each quoted strike range`;
+  const figS = $('figLvSmile'), hostS = chart(figS, drawSmile), figT = $('figLvTerm'), hostT = chart(figT, drawTerm), figC = $('figLvCurve'), hostC = chart(figC, drawCurve);
+  const figK = $('figLvStrike'), hostK = chart(figK, drawK), figB = $('figLvBk'), hostB = chart(figB, drawB);
+  let cur = null, cls = null, byDate = {};
+  chipGroup($('lvExp'), p => { cur = p; drawSmile(); });
+  segmented('lvCls', v => { cls = v; drawB(); });
+  const sq = dd => Math.sqrt(Math.max(dd, 0.5));
+  const dayTicks = maxD => [1, 7, 30, 91, 182, 365, 730].filter(v => v <= maxD * 1.05).map(v => sq(v));
+  const dayFmt = v => { const dd = Math.round(v * v); return dd >= 365 ? Math.round(dd / 365) + 'y' : dd >= 30 ? Math.round(dd / 30.4) + 'm' : dd + 'd'; };
 
-  // smile
-  const fig = $('figLvSmile'), host = chart(fig, drawSmile), chips = $('lvExp');
-  let cur = d.smiles.length > 1 ? d.smiles[1].expiry : (d.smiles[0] || {}).expiry;
-  d.smiles.forEach(s => { const b = document.createElement('button'); b.type = 'button'; b.className = 'chip-btn'; b.dataset.p = s.expiry; b.textContent = `${fmtExp(s.expiry)} · ${s.days}d`; if (s.expiry === cur) b.setAttribute('aria-pressed', 'true'); chips.append(b); });
-  chipGroup(chips, p => { cur = p; drawSmile(); });
+  function tiles() {
+    const S0 = D.spot.level, E = D.expiries, e0 = E[0];
+    $('lvIdxL').textContent = C.name; $('lvSpx').textContent = num(S0); $('lvSpxS').replaceChildren(chgSpan(D.spot.change_pct, 2, ' %'), document.createTextNode(' on the day'));
+    $('lvMoveL').textContent = 'Implied move to ' + fmtExp(e0.expiry);
+    $('lvMove').textContent = e0.rep_move ? '±' + (e0.rep_move * 100).toFixed(2) + ' %' : '–';
+    $('lvMoveS').textContent = e0.rep_move ? `±${Math.round(S0 * e0.rep_move)} pts · model-free (straddle ±${(e0.straddle_move * 100).toFixed(2)} %)` : '';
+    const c30 = D.checks.replication_vs_cboe.find(x => x.index === C.v30);
+    $('lvV30').textContent = c30 ? c30.mine.toFixed(2) + ' %' : '–'; $('lvV30S').textContent = c30 ? `my replication · ${C.v30} ${c30.cboe.toFixed(2)}` : 'my replication';
+    const t = D.term, ratio = C.ix === 'SPX' && d.vix.VIX3M && d.vix.VIX ? d.vix.VIX3M.level / d.vix.VIX.level : t && t.ratio_3m_1m;
+    $('lvTs').textContent = ratio ? ratio.toFixed(2) + '×' : '–';
+    $('lvTsS').textContent = (C.ix === 'SPX' ? 'VIX3M / VIX' : '3M / 1M, model-free') + (ratio ? ' · ' + (ratio >= 1 ? 'contango (calm)' : 'backwardation (stress)') : '');
+    const zg = D.gex.zero_gamma_A;
+    $('lvZg').textContent = zg ? num(zg, 0) : 'none'; $('lvZgS').textContent = zg ? `${minus(((zg / S0 - 1) * 100).toFixed(1))} % from spot · convention A` : 'no sign change in range';
+    const rm = E.filter(e => e.days <= 400).map(e => e.fit_rmse).sort((a, b) => a - b), med = rm[Math.floor(rm.length / 2)];
+    $('lvFit').textContent = (med * 100).toFixed(2) + ' vol pts'; $('lvFitS').textContent = `median SVI RMSE · ${E.length} expiries · ${D.checks.butterfly_violations ? D.checks.butterfly_violations + ' butterfly flags' : 'no butterfly arbitrage'}`;
+  }
+  function surface() {
+    const sf = D.surface, NX = sf.kf.length, NY = sf.expiry.length;
+    const xs = Float64Array.from(sf.kf), ys = Float64Array.from(sf.T, t => Math.sqrt(t)), z = new Float64Array(NX * NY);
+    for (let j = 0; j < NY; j++) for (let i = 0; i < NX; i++) { const v = sf.iv[j][i]; z[j * NX + i] = v == null ? NaN : v; }
+    const maxDays = Math.max(...sf.days);
+    const yT = [[7, '1w'], [30, '1m'], [91, '3m'], [182, '6m'], [365, '1y']].filter(([dd]) => dd <= maxDays + 5).map(([dd, t]) => ({ v: Math.sqrt(dd / 365), t }));
+    s3.set({ nx: NX, ny: NY, x: xs, y: ys, z, cmap: 'seq', curves: [{ x: 100, label: 'ATM (K = F)' }], xTicks: [80, 85, 90, 95, 100, 105, 110].map(v => ({ v, t: v + '%' })), yTicks: yT, zFmt: v => v.toFixed(0) + '%', labels: { x: 'Strike K/F', y: 'Expiry', z: 'IV' },
+      hover: (i, j) => { const e = byDate[sf.expiry[j]]; return [`${fmtExp(sf.expiry[j])} (${sf.days[j]} d) · K/F ${xs[i].toFixed(0)} %`, ['implied vol', isFinite(z[j * NX + i]) ? z[j * NX + i].toFixed(2) + ' %' : '–'], ['strike ≈', num(e.F * xs[i] / 100, 0)], ['SVI RMSE', (e.fit_rmse * 100).toFixed(2) + ' vol pts']]; } });
+    let lo = Infinity, hi = -Infinity; for (const v of z) if (isFinite(v)) { lo = Math.min(lo, v); hi = Math.max(hi, v); }
+    colorbar('lvBar', 'seq', lo, hi, v => v.toFixed(1) + ' %', 'Implied vol');
+    $('lvSurfT').textContent = C.ix + ' implied vol';
+    $('lvSurfSub').textContent = `SVI fit per expiry · ${NY} expiries up to ${maxDays} days · drawn only inside each quoted strike range · amber: at the money`;
+  }
+  function smileChips() {
+    const chips = $('lvExp'); chips.replaceChildren();
+    cur = D.smiles.length > 1 ? D.smiles[1].expiry : (D.smiles[0] || {}).expiry;
+    D.smiles.forEach(s => { const b = document.createElement('button'); b.type = 'button'; b.className = 'chip-btn'; b.dataset.p = s.expiry; b.textContent = `${fmtExp(s.expiry)} · ${s.days}d`; if (s.expiry === cur) b.setAttribute('aria-pressed', 'true'); chips.append(b); });
+  }
   function drawSmile() {
-    const s = d.smiles.find(x => x.expiry === cur); if (!s) return;
+    const s = D.smiles.find(x => x.expiry === cur); if (!s) return;
     const e = byDate[cur], pts = s.pts.slice().sort((a, b) => a[0] - b[0]);
     const all = pts.flatMap(p => [p[2] ?? p[1], p[3] ?? p[1]]);
     const x0 = pts[0][0], x1 = pts[pts.length - 1][0];
-    const base = chartBase(host, { height: 250, m: { l: 40 }, x: [x0, x1], y: niceDomain(Math.min(...all), Math.max(...all), 5), xTitle: 'Strike, % of forward', yFmt: v => v.toFixed(0) + '%', xFmt: v => v.toFixed(0) + '%' });
+    const base = chartBase(hostS, { height: 250, m: { l: 40 }, x: [x0, x1], y: niceDomain(Math.min(...all), Math.max(...all), 5), xTitle: 'Strike, % of forward', yFmt: v => v.toFixed(0) + '%', xFmt: v => v.toFixed(0) + '%' });
     const { svg, x, y, plot } = base;
     pts.forEach(p => { if (p[2] != null && p[3] != null) S('line', { x1: x(p[0]), x2: x(p[0]), y1: y(p[2]), y2: y(p[3]), class: 'ln-thin ln-ref', 'stroke-opacity': 0.8 }, svg); else S('circle', { cx: x(p[0]), cy: y(p[1]), r: 1.5, class: 'f-ref' }, svg); });
     const cx = Array.from({ length: 160 }, (_, i) => x0 + i * (x1 - x0) / 159), cv = cx.map(v => Math.sqrt(Math.max(sviW(e.svi, Math.log(v / 100)), 1e-12) / e.T) * 100);
     S('path', { d: linePath(cx, cv, x, y), class: 'ln ln-s1' }, svg);
     S('line', { x1: x(100), x2: x(100), y1: plot.y0, y2: plot.y1, class: 'marker', 'stroke-opacity': 0.4 }, svg); txt(svg, x(100) + 4, plot.y0 + 11, 'forward', 'ann');
     const dot = S('circle', { r: 4, class: 'ring f-s1', visibility: 'hidden' }, svg);
-    interact(base, host, pts.length, i => x(pts[i][0]), i => {
+    interact(base, hostS, pts.length, i => x(pts[i][0]), i => {
       const p = pts[i], f = Math.sqrt(Math.max(sviW(e.svi, Math.log(p[0] / 100)), 1e-12) / e.T) * 100;
       dot.setAttribute('cx', x(p[0])); dot.setAttribute('cy', y(f)); dot.setAttribute('visibility', 'visible');
       return { title: `K/F ${p[0].toFixed(1)} % · strike ≈ ${num(e.F * p[0] / 100, 0)}`, rows: [{ value: p[2] != null ? `${p[2].toFixed(2)}–${p[3].toFixed(2)} %` : p[1].toFixed(2) + ' %', label: 'bid–ask IV', color: col('--ref') }, { value: f.toFixed(2) + ' %', label: 'SVI fit', color: col('--s1') }], y: y(f) };
     }, { onClear: () => dot.setAttribute('visibility', 'hidden') });
-    $('lvSmileSub').textContent = `${fmtExp(cur)} · ${s.days} days · forward ${num(e.F)} · ${e.n} OTM strikes`;
+    $('lvSmileSub').textContent = `${C.ix} · ${fmtExp(cur)} · ${s.days} days · forward ${num(e.F)} · ${e.n} OTM strikes`;
     $('lvSmileRead').innerHTML = '';
     const b = document.createElement('b'); b.textContent = 'Fit: ';
     $('lvSmileRead').append(b, `RMSE ${(e.fit_rmse * 100).toFixed(2)} vol pts; ${Math.round(e.fit_inside * 100)} % of strikes priced inside the bid–ask IV. Tight 0DTE-style spreads make “inside” a demanding test — a five-parameter SVI cannot thread every quote.`);
-    fillTable(fig, ['K/F', 'Bid IV', 'Mid IV', 'Ask IV', 'SVI'], pts.map(p => [p[0].toFixed(1) + ' %', p[2] != null ? p[2].toFixed(2) : '–', p[1].toFixed(2), p[3] != null ? p[3].toFixed(2) : '–', (Math.sqrt(Math.max(sviW(e.svi, Math.log(p[0] / 100)), 1e-12) / e.T) * 100).toFixed(2)]));
+    fillTable(figS, ['K/F', 'Bid IV', 'Mid IV', 'Ask IV', 'SVI'], pts.map(p => [p[0].toFixed(1) + ' %', p[2] != null ? p[2].toFixed(2) : '–', p[1].toFixed(2), p[3] != null ? p[3].toFixed(2) : '–', (Math.sqrt(Math.max(sviW(e.svi, Math.log(p[0] / 100)), 1e-12) / e.T) * 100).toFixed(2)]));
   }
-  drawSmile();
-
-  // measurement check
-  const tb = $('lvCheck').tBodies[0];
-  d.checks.replication_vs_cboe.forEach(c => { const tr = tb.insertRow(); [`${c.index} (${c.days} d)`, c.mine.toFixed(2), c.cboe.toFixed(2), minus((c.mine - c.cboe >= 0 ? '+' : '') + (c.mine - c.cboe).toFixed(2))].forEach((v, i) => { const td = tr.insertCell(); td.textContent = v; if (i) td.className = 'num'; }); });
-
-  // ATM term structure
-  const TE = E.filter(e => e.days <= 730);
-  const term = lineChart('figLvTerm', { xs: TE.map(e => e.days), series: [{ v: TE.map(e => e.atm_iv * 100), cls: 's1', label: 'ATM IV' }], xTitle: 'Days to expiry', yFmt: v => v.toFixed(0) + '%', tipX: dd => { const e = TE.find(x => x.days === dd); return `${fmtExp(e.expiry)} · ${dd} days`; }, fmt: v => v.toFixed(2) + ' %', height: 200, m: { l: 40 },
-    table: { head: ['Expiry', 'Days', 'ATM IV'], rows: () => TE.map(e => [e.expiry, e.days, (e.atm_iv * 100).toFixed(2) + ' %']) } });
-  term.redraw();
-
-  // VIX curve today
-  const VC = [['VIX1D', 1], ['VIX9D', 9], ['VIX', 30], ['VIX3M', 93]].filter(([k]) => d.vix[k]);
-  const figC = $('figLvCurve'), hostC = chart(figC, drawCurve);
-  function drawCurve() {
-    const vals = VC.map(([k]) => d.vix[k].level);
-    const base = chartBase(hostC, { height: 220, m: { l: 36, r: 20 }, x: [-0.4, VC.length - 0.6], y: niceDomain(Math.min(...vals) * 0.9, Math.max(...vals) * 1.08, 4), xTicks: false, yFmt: v => v.toFixed(0) });
+  function checkTable() {
+    const tb = $('lvCheck').tBodies[0]; tb.replaceChildren();
+    D.checks.replication_vs_cboe.forEach(c => { const tr = tb.insertRow(); [`${c.index} (${c.days} d)`, c.mine.toFixed(2), c.cboe.toFixed(2), minus((c.mine - c.cboe >= 0 ? '+' : '') + (c.mine - c.cboe).toFixed(2))].forEach((v, i) => { const td = tr.insertCell(); td.textContent = v; if (i) td.className = 'num'; }); });
+    $('lvCheckS').textContent = `My model-free replication from the ${C.ix} chain, interpolated to the index tenor${C.cboe.length > 1 ? 's' : ''}, vs. Cboe’s official ${C.cboe.filter(([k]) => k !== 'VIX1D').map(([k]) => k).join(', ')}.`;
+  }
+  // term structure: tiles, spot / forward chart, fixed-tenor curve, calendar table, history
+  function termTiles() {
+    const t = D.term, tv = Object.fromEntries(t.tenors.map(x => [x.days, x.vol])), c = t.calendar;
+    $('tmState').textContent = t.ratio_3m_1m ? t.ratio_3m_1m.toFixed(2) + '×' : '–';
+    $('tmStateS').textContent = t.state ? `${t.state} · 3M ${tv[93].toFixed(1)} % vs. 1M ${tv[30].toFixed(1)} %` : 'not enough expiries';
+    const fr = tv[9] && tv[30] ? tv[9] / tv[30] : null;
+    $('tmFront').textContent = fr ? fr.toFixed(2) + '×' : '–';
+    $('tmFrontS').textContent = fr ? `9 d ${tv[9].toFixed(1)} % vs. 30 d ${tv[30].toFixed(1)} % · ${fr >= 1 ? 'front inverted' : 'front upward-sloping'}` : '';
+    $('tmCal').textContent = `${c.violations.length} of ${c.pairs}`;
+    $('tmCalS').textContent = c.violations.length ? `pairs cross somewhere · ${c.material} beyond the fits’ own error` : 'no crossing smiles';
+    $('tmFwd').textContent = `${c.atm_negative_forward} of ${t.forward.length}`;
+    $('tmFwdS').textContent = c.atm_negative_forward ? 'ATM total variance falls between these expiries' : 'ATM total variance rises everywhere';
+  }
+  function drawTerm() {
+    const E = D.expiries.filter(e => e.days <= 400 && e.days >= 0), F = D.term.forward.filter(f => f.db <= 400);
+    const mf = E.map(e => (e.rep_var && e.rep_var > 0 ? Math.sqrt(e.rep_var / e.T) * 100 : null)), atm = E.map(e => e.atm_iv * 100);
+    const vals = atm.concat(mf.filter(fin), F.map(f => f.atm).filter(fin));
+    const maxD = Math.max(...E.map(e => e.days));
+    const base = chartBase(hostT, { height: 260, m: { l: 40, b: 34 }, x: [sq(E[0].days) - 0.3, sq(maxD) + 0.3], y: niceDomain(Math.min(...vals), Math.max(...vals), 5), xTicks: dayTicks(maxD), xFmt: dayFmt, yFmt: v => v.toFixed(0) + '%' });
     const { svg, x, y, plot } = base;
-    S('path', { d: linePath(VC.map((_, i) => i), vals, x, y), class: 'ln ln-s1' }, svg);
-    VC.forEach(([k, days], i) => { S('circle', { cx: x(i), cy: y(vals[i]), r: 5, class: 'ring f-s1' }, svg); txt(svg, x(i), y(vals[i]) - 12, vals[i].toFixed(2), 'lbl-strong', 'middle'); txt(svg, x(i), plot.y1 + 17, k, 'tick', 'middle'); txt(svg, x(i), plot.y1 + 31, days + ' d', 'axis-title', 'middle'); });
-    interact(base, hostC, VC.length, i => x(i), i => ({ title: VC[i][0] + ' · ' + VC[i][1] + ' days', rows: [{ value: vals[i].toFixed(2), label: 'index level', color: col('--s1') }, { value: (vals[i] / Math.sqrt(252)).toFixed(2) + ' %', label: 'implied daily move' }], y: y(vals[i]) }), { crosshair: false });
-    fillTable(figC, ['Index', 'Tenor', 'Level'], VC.map(([k, dd], i) => [k, dd + ' d', vals[i].toFixed(2)]));
+    F.forEach(f => {
+      if (fin(f.atm)) S('line', { x1: x(sq(f.da)), x2: x(sq(f.db)), y1: y(f.atm), y2: y(f.atm), class: 'ln ln-s2', 'stroke-opacity': 0.85 }, svg);
+      else if (f.atm_var != null && f.atm_var < 0) S('rect', { x: x(sq(f.da)), y: plot.y0, width: Math.max(2, x(sq(f.db)) - x(sq(f.da))), height: plot.y1 - plot.y0, class: 'wash-neg' }, svg);
+    });
+    S('path', { d: linePath(E.map(e => sq(e.days)), mf, x, y), class: 'ln-thin ln-s3' }, svg);
+    S('path', { d: linePath(E.map(e => sq(e.days)), atm, x, y), class: 'ln ln-s1' }, svg);
+    E.forEach((e, i) => S('circle', { cx: x(sq(e.days)), cy: y(atm[i]), r: 2.4, class: 'f-s1' }, svg));
+    const dot = S('circle', { r: 4.5, class: 'ring f-s1', visibility: 'hidden' }, svg);
+    interact(base, hostT, E.length, i => x(sq(E[i].days)), i => {
+      const e = E[i], f = D.term.forward.find(q => q.a === e.expiry); dot.setAttribute('cx', x(sq(e.days))); dot.setAttribute('cy', y(atm[i])); dot.setAttribute('visibility', 'visible');
+      return { title: `${fmtExp(e.expiry)} · ${e.days} d · ${e.settle}`, rows: [{ value: atm[i].toFixed(2) + ' %', label: 'ATM vol (SVI)', color: col('--s1') }, { value: fin(mf[i]) ? mf[i].toFixed(2) + ' %' : '–', label: 'model-free vol', color: col('--s3') },
+        { value: f ? (fin(f.atm) ? f.atm.toFixed(2) + ' %' : 'negative variance') : '–', label: f ? `forward vol to ${fmtExp(f.b)}` : 'last expiry', color: col('--s2') }], y: y(atm[i]) };
+    }, { onClear: () => dot.setAttribute('visibility', 'hidden') });
+    fillTable(figT, ['Expiry', 'Days', 'ATM vol', 'Model-free vol', 'Forward vol to next'], E.map((e, i) => { const f = D.term.forward.find(q => q.a === e.expiry); return [e.expiry, e.days, atm[i].toFixed(2) + ' %', fin(mf[i]) ? mf[i].toFixed(2) + ' %' : '–', f ? (fin(f.atm) ? f.atm.toFixed(2) + ' %' : f.atm_var < 0 ? 'negative' : '–') : '–']; }));
   }
-  drawCurve();
-
-  // VIX history
-  const H0 = d.history, cut = Math.max(0, H0.dates.length - 250), H = Object.fromEntries(Object.entries(H0).map(([k, v]) => [k, v.slice(cut)])), hx = H.dates.map((_, i) => i), mon = i => new Date(H.dates[i] + 'T12:00:00Z').toLocaleDateString('en-US', { month: 'short', timeZone: 'UTC' });
-  const hist = lineChart('figLvHist', { xs: hx, series: [['VIX1D', 's1'], ['VIX9D', 's2'], ['VIX', 's3'], ['VIX3M', 's4']].map(([k, c]) => ({ v: H[k], cls: c, label: k, thin: k === 'VIX1D' })), xTitle: '', xFmt: i => mon(Math.round(i)), tipX: i => H.dates[i], fmt: v => v.toFixed(2), height: 220, m: { l: 36, b: 26 },
-    table: { head: ['Date', 'VIX1D', 'VIX9D', 'VIX', 'VIX3M'], rows: () => H.dates.map((dd, i) => [dd, H.VIX1D[i], H.VIX9D[i], H.VIX[i], H.VIX3M[i]]).slice(-60).reverse() } });
-  hist.redraw();
-
-  // GEX profile
-  const G = d.gex, bn = v => v / 1e9;
-  const gp = lineChart('figLvGex', { xs: G.spot_grid, series: [{ v: G.A.map(bn), cls: 's1', label: 'A · long calls, short puts' }, { v: G.B.map(bn), cls: 's2', label: 'B · short all' }], xTitle: 'Hypothetical SPX level', xFmt: v => num(v, 0), yFmt: v => minus(v.toFixed(v % 1 ? 1 : 0)), tipX: v => 'SPX ' + num(v, 0), fmt: v => minus(v.toFixed(2)) + ' bn $', height: 240, m: { l: 44 }, baseline: 0,
-    over: ({ svg, x, plot }) => { S('line', { x1: x(S0), x2: x(S0), y1: plot.y0, y2: plot.y1, class: 'marker', 'stroke-opacity': 0.5 }, svg); txt(svg, x(S0) + 4, plot.y0 + 11, 'spot', 'ann'); if (zg) { S('line', { x1: x(zg), x2: x(zg), y1: plot.y0, y2: plot.y1, class: 'marker' }, svg); txt(svg, x(zg) - 4, plot.y0 + 11, 'zero gamma (A) ' + num(zg, 0), 'ann', 'end'); } },
-    table: { head: ['SPX', 'A ($bn)', 'B ($bn)'], rows: () => G.spot_grid.map((s, i) => [num(s, 0), bn(G.A[i]).toFixed(2), bn(G.B[i]).toFixed(2)]) } });
-  gp.redraw();
-
-  // GEX by strike (A)
-  const figK = $('figLvStrike'), hostK = chart(figK, drawK), BS = G.by_strike;
+  function drawCurve() {
+    const T = D.term.tenors.filter(x => fin(x.vol)), ref = C.cboe.filter(([k]) => (C.ix === 'SPX' ? d.vix[k] : D.vix[k])).map(([k, dd]) => [k, dd, (C.ix === 'SPX' ? d.vix[k] : D.vix[k]).level]);
+    const vals = T.map(x => x.vol).concat(ref.map(r => r[2])), maxD = Math.max(...T.map(x => x.days), ...ref.map(r => r[1]));
+    const base = chartBase(hostC, { height: 260, m: { l: 40, r: 20, b: 34 }, x: [sq(1) - 0.3, sq(maxD) + 0.5], y: niceDomain(Math.min(...vals) * 0.92, Math.max(...vals) * 1.06, 4), xTicks: dayTicks(maxD), xFmt: dayFmt, yFmt: v => v.toFixed(0) + '%' });
+    const { svg, x, y } = base;
+    S('path', { d: linePath(T.map(t => sq(t.days)), T.map(t => t.vol), x, y), class: 'ln ln-s1' }, svg);
+    T.forEach(t => S('circle', { cx: x(sq(t.days)), cy: y(t.vol), r: 3.5, class: 'ring f-s1' }, svg));
+    ref.forEach(([k, dd, v]) => { S('circle', { cx: x(sq(dd)), cy: y(v), r: 5, class: 'ring f-s2' }, svg); txt(svg, x(sq(dd)) + 7, y(v) - 7, k, 'ann'); });
+    const pts = T.map(t => ({ dd: t.days, rows: [{ value: t.vol.toFixed(2) + ' %', label: 'model-free, from the chain', color: col('--s1') }].concat(ref.filter(r => r[1] === t.days).map(r => ({ value: r[2].toFixed(2) + ' %', label: r[0] + ' (Cboe)', color: col('--s2') }))) }));
+    interact(base, hostC, pts.length, i => x(sq(pts[i].dd)), i => ({ title: `${pts[i].dd} days`, rows: pts[i].rows, y: y(T[i].vol) }), { crosshair: false });
+    $('lvCurveS').textContent = `My model-free vol from the ${C.ix} chain, interpolated to fixed tenors like the VIX, and Cboe’s ${ref.map(r => r[0]).join(', ')}.`;
+    fillTable(figC, ['Tenor', 'Model-free (mine)', 'Cboe index'], T.map(t => { const r = ref.find(q => q[1] === t.days); return [t.days + ' d', t.vol.toFixed(2) + ' %', r ? `${r[0]} ${r[2].toFixed(2)}` : '–']; }).concat(ref.filter(r => !T.some(t => t.days === r[1])).map(r => [r[1] + ' d', '–', `${r[0]} ${r[2].toFixed(2)}`])));
+  }
+  function calTable() {
+    const c = D.term.calendar, tb = $('lvCal').tBodies[0]; tb.replaceChildren();
+    if (!c.violations.length) { const tr = tb.insertRow(), td = tr.insertCell(); td.colSpan = 5; td.textContent = 'No two consecutive fitted smiles cross — total variance rises with maturity at every strike.'; }
+    c.violations.forEach(v => { const tr = tb.insertRow(); [`${fmtExp(v.a)} → ${fmtExp(v.b)}`, (Math.exp(v.k) * 100).toFixed(1) + ' %', v.vol_pts.toFixed(2) + ' pts', v.fit_rmse_pts.toFixed(2) + ' pts', v.within_fit_error ? 'within fit error' : 'beyond fit error'].forEach((val, i) => { const td = tr.insertCell(); td.textContent = val; if (i && i < 4) td.className = 'num'; if (i === 4) td.className = v.within_fit_error ? '' : 'o-broke'; }); });
+    $('lvCalS').textContent = `${c.pairs} pairs of consecutive ${C.ix} expiries (${c.slices} well-fitted smiles), compared at the same forward log-moneyness on the strikes both quote.`;
+  }
+  function drawHist() {
+    const H0 = d.history, cut = Math.max(0, H0.dates.length - 250), H = Object.fromEntries(Object.entries(H0).map(([k, v]) => [k, v.slice(cut)])), hx = H.dates.map((_, i) => i), mon = i => new Date(H.dates[i] + 'T12:00:00Z').toLocaleDateString('en-US', { month: 'short', timeZone: 'UTC' });
+    const leg = $('lvHistLeg'); leg.replaceChildren(); C.hist.forEach(([k, c]) => { const li = document.createElement('li'); const sp = document.createElement('span'); sp.className = 'key k-' + c; li.append(sp, k); leg.append(li); });
+    $('lvHistS').textContent = C.ix === 'SPX' ? 'Daily closes of Cboe’s VIX family.' : 'Daily closes of Cboe’s VXN (30-day Nasdaq-100 implied vol).';
+    const hist = lineChart('figLvHist', { xs: hx, series: C.hist.map(([k, c]) => ({ v: H[k], cls: c, label: k, thin: k === 'VIX1D' })), xTitle: '', xFmt: i => mon(Math.round(i)), tipX: i => H.dates[i], fmt: v => v.toFixed(2), height: 220, m: { l: 36, b: 26 },
+      table: { head: ['Date'].concat(C.hist.map(h => h[0])), rows: () => H.dates.map((dd, i) => [dd].concat(C.hist.map(([k]) => H[k][i]))).slice(-60).reverse() } });
+    hist.redraw();
+  }
+  // dealer gamma
+  function drawGex() {
+    const G = D.gex, bn = v => v / 1e9, S0 = D.spot.level, zg = G.zero_gamma_A;
+    const gp = lineChart('figLvGex', { xs: G.spot_grid, series: [{ v: G.A.map(bn), cls: 's1', label: 'A · long calls, short puts' }, { v: G.B.map(bn), cls: 's2', label: 'B · short all' }], xTitle: `Hypothetical ${C.ix} level`, xFmt: v => num(v, 0), yFmt: v => minus(v.toFixed(v % 1 ? 1 : 0)), tipX: v => C.ix + ' ' + num(v, 0), fmt: v => minus(v.toFixed(2)) + ' bn $', height: 240, m: { l: 44 }, baseline: 0,
+      over: ({ svg, x, plot }) => { S('line', { x1: x(S0), x2: x(S0), y1: plot.y0, y2: plot.y1, class: 'marker', 'stroke-opacity': 0.5 }, svg); txt(svg, x(S0) + 4, plot.y0 + 11, 'spot', 'ann'); if (zg) { S('line', { x1: x(zg), x2: x(zg), y1: plot.y0, y2: plot.y1, class: 'marker' }, svg); txt(svg, x(zg) - 4, plot.y0 + 11, 'zero gamma (A) ' + num(zg, 0), 'ann', 'end'); } },
+      table: { head: [C.ix, 'A ($bn)', 'B ($bn)'], rows: () => G.spot_grid.map((s, i) => [num(s, 0), bn(G.A[i]).toFixed(2), bn(G.B[i]).toFixed(2)]) } });
+    gp.redraw();
+    $('lvGexS').textContent = `Σ Γ × open interest × 100 × S² × 1 % — $ billions per 1 % move, all expiries (${C.roots}), sticky-strike vols.`;
+  }
   function drawK() {
+    const G = D.gex, BS = G.by_strike, bw0 = G.bin || 25, bn = v => v / 1e9, S0 = D.spot.level;
     const vals = BS.map(r => bn(r[1])), [ylo, yhi] = niceDomain(Math.min(0, ...vals), Math.max(0, ...vals), 4);
-    const base = chartBase(hostK, { height: 240, m: { l: 44 }, x: [BS[0][0] - 12.5, BS[BS.length - 1][0] + 12.5], y: [ylo, yhi], baseline: 0, xTitle: 'Strike', xFmt: v => num(v, 0), yFmt: v => minus(v.toFixed(v % 1 ? 1 : 0)) });
-    const { svg, x, y, plot } = base, bw = Math.max(2, Math.min(24, x(BS[0][0] + 25) - x(BS[0][0]) - 2)), marks = [];
+    const base = chartBase(hostK, { height: 240, m: { l: 44 }, x: [BS[0][0] - bw0 / 2, BS[BS.length - 1][0] + bw0 / 2], y: [ylo, yhi], baseline: 0, xTitle: 'Strike', xFmt: v => num(v, 0), yFmt: v => minus(v.toFixed(v % 1 ? 1 : 0)) });
+    const { svg, x, y, plot } = base, bw = Math.max(2, Math.min(24, x(BS[0][0] + bw0) - x(BS[0][0]) - 2)), marks = [];
     BS.forEach((r, i) => marks.push(S('path', { d: vbar(x(r[0]), bw, y(0), y(vals[i]), bw < 6 ? 1 : 3), class: 'mk ' + (vals[i] >= 0 ? 'f-s1' : 'f-neg') }, svg)));
     S('line', { x1: x(S0), x2: x(S0), y1: plot.y0, y2: plot.y1, class: 'marker', 'stroke-opacity': 0.5 }, svg); txt(svg, x(S0) + 4, plot.y0 + 11, 'spot', 'ann');
-    interact(base, hostK, BS.length, i => x(BS[i][0]), i => { marks.forEach((m2, j) => m2.classList.toggle('hl', j === i)); return { title: 'Strikes ' + num(BS[i][0] - 12.5, 0) + '–' + num(BS[i][0] + 12.5, 0), rows: [{ value: minus(vals[i].toFixed(3)) + ' bn $', label: 'convention A', color: col(vals[i] >= 0 ? '--s1' : '--neg') }, { value: minus(bn(BS[i][2]).toFixed(3)) + ' bn $', label: 'convention B' }], y: y(vals[i]) }; }, { crosshair: false, onClear: () => marks.forEach(m2 => m2.classList.remove('hl')) });
+    interact(base, hostK, BS.length, i => x(BS[i][0]), i => { marks.forEach((m2, j) => m2.classList.toggle('hl', j === i)); return { title: 'Strikes ' + num(BS[i][0] - bw0 / 2, 0) + '–' + num(BS[i][0] + bw0 / 2, 0), rows: [{ value: minus(vals[i].toFixed(3)) + ' bn $', label: 'convention A', color: col(vals[i] >= 0 ? '--s1' : '--neg') }, { value: minus(bn(BS[i][2]).toFixed(3)) + ' bn $', label: 'convention B' }], y: y(vals[i]) }; }, { crosshair: false, onClear: () => marks.forEach(m2 => m2.classList.remove('hl')) });
+    $('lvStrikeS').textContent = `$ billions per 1 % move at today’s spot, ${bw0}-point strike bins, all expiries.`;
     fillTable(figK, ['Strike bin', 'A ($bn)', 'B ($bn)'], BS.map(r => [num(r[0], 0), bn(r[1]).toFixed(3), bn(r[2]).toFixed(3)]));
   }
-  drawK();
-
   // moneyness buckets
-  const BK = d.buckets, figB = $('figLvBk'), hostB = chart(figB, drawB);
-  const classes = BK.classes.filter(c => Object.values(BK.data[c]).some(v => v.oi > 0 || v.vol > 0));
-  let cls = classes.includes('1–7 d') ? '1–7 d' : classes[0];
-  const segEl = $('lvCls'); classes.forEach(c => { const b = document.createElement('button'); b.type = 'button'; b.dataset.v = c; b.textContent = c; if (c === cls) b.setAttribute('aria-pressed', 'true'); segEl.append(b); });
-  segmented('lvCls', v => { cls = v; drawB(); });
+  function clsSeg() {
+    const BK = D.buckets, classes = BK.classes.filter(c => Object.values(BK.data[c]).some(v => v.oi > 0 || v.vol > 0)), segEl = $('lvCls');
+    if (!classes.includes(cls)) cls = classes.includes('1–7 d') ? '1–7 d' : classes[0];
+    segEl.replaceChildren(); classes.forEach(c => { const b = document.createElement('button'); b.type = 'button'; b.dataset.v = c; b.textContent = c; if (c === cls) b.setAttribute('aria-pressed', 'true'); segEl.append(b); });
+  }
   function drawB() {
-    const row = BK.data[cls], names = BK.buckets, oi = names.map(n => row[n].oi), vol = names.map(n => row[n].vol);
+    const BK = D.buckets, row = BK.data[cls], names = BK.buckets, oi = names.map(n => row[n].oi), vol = names.map(n => row[n].vol);
     const so = oi.reduce((a, b) => a + b, 0) || 1, sv = vol.reduce((a, b) => a + b, 0) || 1, shO = oi.map(v => v / so), shV = vol.map(v => v / sv);
     const base = chartBase(hostB, { height: 240, m: { l: 42, b: 30 }, x: [-0.5, names.length - 0.5], y: niceDomain(0, Math.max(...shO, ...shV) * 1.1, 4), xTicks: false, yFmt: v => Math.round(v * 100) + ' %' });
     const { svg, x, y, plot } = base, bw = Math.min(24, (x(1) - x(0)) / 3), marks = [];
@@ -2741,14 +2875,35 @@ INITS.live = () => LIVE.on(d => {
     });
     interact(base, hostB, names.length, i => x(i), i => { marks.forEach((m2, j) => m2.classList.toggle('hl', Math.floor(j / 2) === i)); return { title: `${names[i]} · ${cls}`, rows: [{ value: pct(shO[i]), label: `of open interest (${num(oi[i], 0)})`, color: col('--s1') }, { value: pct(shV[i]), label: `of volume (${num(vol[i], 0)})`, color: col('--s2') }, { value: '$' + num(row[names[i]].prem / 1e6, 1) + ' m', label: 'premium traded' }], y: y(Math.max(shO[i], shV[i])) }; }, { crosshair: false, onClear: () => marks.forEach(m2 => m2.classList.remove('hl')) });
     const otm = (shV[0] + shV[1]) - (shO[0] + shO[1]);
-    $('lvBkRead').textContent = `${cls}: out-of-the-money buckets (|Δ| < 0.40) hold ${pct(shO[0] + shO[1], 0)} of open interest and take ${pct(shV[0] + shV[1], 0)} of volume — ${otm > 0 ? 'traded more than held' : 'held more than traded'} (${minus((otm * 100).toFixed(1))} pts). One day, descriptive only.`;
+    $('lvBkRead').textContent = `${C.ix}, ${cls}: out-of-the-money buckets (|Δ| < 0.40) hold ${pct(shO[0] + shO[1], 0)} of open interest and take ${pct(shV[0] + shV[1], 0)} of volume — ${otm > 0 ? 'traded more than held' : 'held more than traded'} (${minus((otm * 100).toFixed(1))} pts). One day, descriptive only.`;
     fillTable(figB, ['Bucket', 'OI', 'OI share', 'Volume', 'Volume share', 'Premium traded'], names.map((n, i) => [n, num(oi[i], 0), pct(shO[i]), num(vol[i], 0), pct(shV[i]), '$' + num(row[n].prem / 1e6, 1) + ' m']));
   }
-  drawB();
-
-  // expiry table
-  const et = $('lvExpTable').tBodies[0];
-  E.forEach(e => { const tr = et.insertRow(); [e.expiry, e.settle, e.days, num(e.F), e.days >= 30 && e.parity_ok ? (e.r * 100).toFixed(2) + ' %' : '–', e.days >= 30 && e.parity_ok ? (e.q * 100).toFixed(2) + ' %' : '–', (e.atm_iv * 100).toFixed(2) + ' %', e.rep_move ? '±' + (e.rep_move * 100).toFixed(2) + ' %' : '–', '±' + (e.straddle_move * 100).toFixed(2) + ' %', (e.fit_rmse * 100).toFixed(2), Math.round(e.fit_inside * 100) + ' %', e.butterfly_ok ? 'ok' : 'flag'].forEach((v, i) => { const td = tr.insertCell(); td.textContent = v; if (i >= 2 && i <= 10) td.className = 'num'; }); });
+  function expTable() {
+    const et = $('lvExpTable').tBodies[0]; et.replaceChildren();
+    D.expiries.forEach(e => { const tr = et.insertRow(); [e.expiry, e.settle, e.days, num(e.F), e.days >= 30 && e.parity_ok ? (e.r * 100).toFixed(2) + ' %' : '–', e.days >= 30 && e.parity_ok ? (e.q * 100).toFixed(2) + ' %' : '–', (e.atm_iv * 100).toFixed(2) + ' %', e.rep_move ? '±' + (e.rep_move * 100).toFixed(2) + ' %' : '–', '±' + (e.straddle_move * 100).toFixed(2) + ' %', (e.fit_rmse * 100).toFixed(2), Math.round(e.fit_inside * 100) + ' %', e.butterfly_ok ? 'ok' : 'flag'].forEach((v, i) => { const td = tr.insertCell(); td.textContent = v; if (i >= 2 && i <= 10) td.className = 'num'; }); });
+    $('lvExpSum').textContent = `All ${D.expiries.length} ${C.ix} expiries — forward, rates, fit quality`;
+  }
+  function render() {
+    byDate = Object.fromEntries(D.expiries.map(e => [e.expiry, e]));
+    tiles(); surface(); smileChips(); drawSmile(); checkTable();
+    if (D.term) { termTiles(); drawTerm(); drawCurve(); calTable(); } else $('tmCal').textContent = 'reload';
+    drawHist(); drawGex(); drawK(); clsSeg(); drawB(); expTable();
+    $('lvIxNote').textContent = C.ix === 'SPX' ? 'Everything below the history chart follows this switch.' : `Nasdaq-100 chain · prices as of ${fmtET(new Date(D.meta.valuation_time_et))} ET · ${D.expiries.length} expiries`;
+  }
+  const segs = [...document.querySelectorAll('.lvIxSeg')];
+  const sync = v => segs.forEach(sg => sg.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === v))));
+  function setIx(v) {
+    if (v === C.ix) return sync(v);
+    if (v === 'SPX') { D = d; C = CFG.SPX; sync(v); return render(); }
+    $('lvIxNote').textContent = 'Loading the Nasdaq-100 chain…';
+    NDXD.on(nd => {
+      if (!nd) { $('lvIxNote').textContent = 'The Nasdaq-100 file (data/live/ndx.js) could not be loaded.'; sync(C.ix); return; }
+      D = nd; C = CFG.NDX; sync('NDX'); render();
+    });
+  }
+  segs.forEach(sg => sg.addEventListener('click', e => { const b = e.target.closest('button'); if (b) setIx(b.dataset.v); }));
+  window.__lvSetIx = setIx;
+  render();
 });
 
 /* ---------- history & live chart ----------
@@ -3029,7 +3184,7 @@ INITS.range = () => LIVE.on(d0 => {
   document.querySelectorAll('#v-range .fig').forEach(expandable);
   const VOLS = {
     ES: [{ v: 'VIX', n: 'VIX', hint: 'Cboe’s 30-day implied vol — the classic “VIX ÷ 16” rule.' }, { v: 'VIX1D', n: 'VIX1D', hint: 'Cboe’s one-day implied vol: prices the next session directly.' }, { v: 'CHAIN', n: 'Chain', hint: 'My model-free implied move to the next expiry, straight from the SPX chain (day only).' }],
-    NQ: [{ v: 'VXN', n: 'VXN', hint: 'Cboe’s 30-day Nasdaq-100 implied vol (VXN ÷ 16 per day).' }],
+    NQ: [{ v: 'VXN', n: 'VXN', hint: 'Cboe’s 30-day Nasdaq-100 implied vol (VXN ÷ 16 per day).' }, { v: 'CHAIN', n: 'Chain', hint: 'My model-free implied move to the next expiry, straight from the NDX chain (day only).' }],
   };
   const HZ_HINT = { 1: 'One trading day: σ = IV ÷ √252 = IV ÷ 15.87.', 5: 'Five trading days: σ = IV × √(5/252) = IV ÷ 7.10.', 21: 'About a month (21 trading days): σ = IV × √(21/252) = IV ÷ 3.46.' };
   const A_HINT = { fair: 'Index + basis: where the future should trade now (Cboe data, ~15 min delayed).', prev: 'Prior index close + today’s basis — the classic reference for a new session.', custom: 'Any price, e.g. your broker’s real-time quote — this makes the ladder real-time.' };
@@ -3077,7 +3232,7 @@ INITS.range = () => LIVE.on(d0 => {
     el.append(eq, res, lv);
     (flash || []).forEach(k => { const t = el.querySelector(`[data-k="${k}"]`); if (t) { t.classList.add('flash'); setTimeout(() => t.classList.remove('flash'), 800); } });
   }
-  const calKeyNow = () => C === 'NQ' ? 'NQ_VXN' : V === 'VIX1D' ? 'ES_VIX1D' : V === 'VIX' ? 'ES_VIX' : null;
+  const calKeyNow = () => C === 'NQ' ? (V === 'VXN' ? 'NQ_VXN' : null) : V === 'VIX1D' ? 'ES_VIX1D' : V === 'VIX' ? 'ES_VIX' : null;
   function update(flash) {
     const { c, anchor, sig, iv, volLabel, volSub } = current();
     $('rgCode').textContent = `${c.code} · expires ${fmtExp(c.expiry)}`;

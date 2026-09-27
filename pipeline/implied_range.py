@@ -167,7 +167,7 @@ def study_block(spx_ohlc: list, ndx_ohlc: list, iv_hist: dict) -> dict | None:
             "note": "returns in basis points vs. the prior close; iv = prior close's index level"}
 
 
-def build(snap: dict, quotes: dict, ndx_chain: dict | None, hist: dict) -> dict:
+def build(snap: dict, quotes: dict, ndx_chain: dict | None, hist: dict, ndx_snap: dict | None = None) -> dict:
     t0 = dt.datetime.fromisoformat(snap["meta"]["valuation_time_et"])
     exp, code = front_quarterly(t0.date())
     spx, spot_spx = snap["spot"]["level"], snap["spot"]["level"]
@@ -181,6 +181,7 @@ def build(snap: dict, quotes: dict, ndx_chain: dict | None, hist: dict) -> dict:
         vals = [(d, v) for d, v in zip(dates, series) if v is not None and d < t0.date().isoformat()]
         return vals[-1][1] if vals else None
     e0 = snap["expiries"][0] if snap["expiries"] else {}
+    n0 = ndx_snap["expiries"][0] if ndx_snap and ndx_snap.get("expiries") else None
     contracts = {
         "ES": {"index": "SPX", "label": "E-mini S&P 500", "code": "ES" + code, "expiry": exp.isoformat(), "spot": spot_spx,
                "prev_close": prev_close(spxc), "fair": None if F_es is None else round(F_es, 2),
@@ -190,7 +191,8 @@ def build(snap: dict, quotes: dict, ndx_chain: dict | None, hist: dict) -> dict:
         "NQ": {"index": "NDX", "label": "E-mini Nasdaq-100", "code": "NQ" + code, "expiry": exp.isoformat(), "spot": spot_ndx,
                "prev_close": prev_close(ndxc), "fair": None if not nf else round(nf["F"], 2),
                "basis": None if not (nf and spot_ndx) else round(nf["F"] - spot_ndx, 2),
-               "vols": {k: float(quotes[k]["current_price"]) for k in ("VXN",) if k in quotes}},
+               "vols": {k: float(quotes[k]["current_price"]) for k in ("VXN",) if k in quotes},
+               "model_move": None if not (n0 and n0.get("rep_move")) else round(n0["rep_move"] * 100, 4), "model_expiry": n0.get("expiry") if n0 else None},
     }
     return {"asof": snap["meta"]["valuation_time_et"], "contracts": contracts, "K": K_LEVELS,
             "theory_inside": [round(2 * norm.cdf(k) - 1, 4) for k in K_LEVELS],

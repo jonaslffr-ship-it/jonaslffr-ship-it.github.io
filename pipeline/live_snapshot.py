@@ -42,6 +42,13 @@ UA = {"User-Agent": "Mozilla/5.0 (volatility research snapshot; github.com/jonas
 NY = ZoneInfo("America/New_York")
 YEAR = 365.0 * 24 * 3600          # calendar-time annualization, as in Cboe's VIX methodology
 SYM = re.compile(r"^(SPXW?)(\d{2})(\d{2})(\d{2})([CP])(\d{8})$")
+# per-index chain conventions: PM-settled root (weeklies/dailies), AM-settled monthly root, GEX strike bin,
+# and the Cboe indices my model-free replication is checked against
+INDEX = {
+    "SPX": {"re": SYM, "pm": "SPXW", "am": "SPX", "bin": 25, "rep": (("VIX9D", 9), ("VIX", 30), ("VIX3M", 93))},
+    "NDX": {"re": re.compile(r"^(NDXP?)(\d{2})(\d{2})(\d{2})([CP])(\d{8})$"), "pm": "NDXP", "am": "NDX", "bin": 100, "rep": (("VXN", 30),)},
+}
+TENORS = (9, 30, 60, 93, 182, 365)       # days: model-free vol term structure (VIX-style interpolation)
 BUCKETS = [("Far OTM", 0.0, 0.10), ("OTM", 0.10, 0.40), ("ATM", 0.40, 0.60), ("ITM", 0.60, 0.90), ("Deep ITM", 0.90, 1.01)]
 DTE_CLASSES = [("0DTE", 0, 0), ("1–7 d", 1, 7), ("8–45 d", 8, 45), ("> 45 d", 46, 100000)]
 
@@ -158,11 +165,12 @@ def fit_svi(k, iv, iv_bid, iv_ask, T):
 
 
 # ----------------------------------------------------------------------------- core
-def replication_check(exps, quotes):
+def replication_check(exps, quotes, tenors=(("VIX9D", 9), ("VIX", 30), ("VIX3M", 93))):
     """Interpolate my model-free total variance to the index tenors (VIX method: bracketing PM expiries) and compare."""
     E = [e for e in exps if e["rep_var"] and e["settle"] == "PM"]
     out = []
-    for name, days in (("VIX9D", 9), ("VIX", 30), ("VIX3M", 93)):
+    for name, days in tenors:
+        if name not in quotes: continue
         t = days / 365
         lo = [e for e in E if e["T"] <= t]; hi = [e for e in E if e["T"] > t]
         if not lo or not hi: continue
@@ -172,11 +180,72 @@ def replication_check(exps, quotes):
     return out
 
 
+def mf_vol_at(exps, days):
+    """Model-free vol (%) at a fixed tenor: linear interpolation of total variance between the bracketing
+    PM expiries, exactly as the VIX interpolates its two near-term expiries."""
+    E = sorted([e for e in exps if e["rep_var"] and e["rep_var"] > 0 and e["settle"] == "PM"], key=lambda e: e["T"])
+    t = days / 365
+    lo = [e for e in E if e["T"] <= t]; hi = [e for e in E if e["T"] > t]
+    if not lo or not hi:
+        return None
+    a, b = lo[-1], hi[0]
+    w = (a["rep_var"] * (b["T"] - t) + b["rep_var"] * (t - a["T"])) / (b["T"] - a["T"])
+    return round(math.sqrt(w / t) * 100, 3) if w > 0 else None
+
+
+def calendar_check(slices, tol=1e-6, n=61):
+    """No calendar arbitrage <=> total implied variance w(k, T) is non-decreasing in T at every forward
+    log-moneyness k (Gatheral & Jacquier 2014). slices: [(label, T, svi_params, (k_lo, k_hi))], checked for each
+    consecutive pair on the strikes both expiries actually quote. Returns (pairs checked, violations).
+    Each violation carries its size in vol points (how far the back expiry's IV at that strike would have to rise)
+    and whether that is within the two fits' own RMSE, i.e. indistinguishable from fit noise."""
+    S_ = sorted(slices, key=lambda x: x[1]); out, pairs = [], 0
+    for A_, B_ in zip(S_[:-1], S_[1:]):
+        (la, Ta, pa, ra), (lb, Tb, pb, rb) = A_[:4], B_[:4]
+        k0, k1 = max(ra[0], rb[0]), min(ra[1], rb[1])
+        if k1 <= k0 or Tb <= Ta:
+            continue
+        pairs += 1
+        kg = np.linspace(k0, k1, n); wa, wb = svi_w(pa, kg), svi_w(pb, kg); dw = wb - wa; i = int(np.argmin(dw))
+        if dw[i] < -tol:
+            vp = (math.sqrt(max(wa[i], 0) / Tb) - math.sqrt(max(wb[i], 0) / Tb)) * 100
+            noise = max(A_[4] if len(A_) > 4 else 0, B_[4] if len(B_) > 4 else 0) * 100
+            out.append({"a": la, "b": lb, "k": round(float(kg[i]), 4), "dw": round(float(dw[i]), 7),
+                        "share": round(float(np.mean(dw < -tol)), 3), "vol_pts": round(vp, 3), "fit_rmse_pts": round(noise, 3),
+                        "within_fit_error": bool(vp <= noise)})
+    return pairs, out
+
+
+def term_block(exps):
+    """Contango / backwardation of the model-free term structure, forward vols between consecutive expiries
+    and the calendar-arbitrage check on the fitted smiles."""
+    tenors = [{"days": d_, "vol": mf_vol_at(exps, d_)} for d_ in TENORS]
+    tv = {x["days"]: x["vol"] for x in tenors}
+    ratio = round(tv[93] / tv[30], 4) if tv.get(93) and tv.get(30) else None
+    state = None if ratio is None else "contango" if ratio >= 1.01 else "backwardation" if ratio <= 0.99 else "flat"
+    E = sorted(exps, key=lambda e: e["T"]); fwd = []
+    for a, b in zip(E[:-1], E[1:]):
+        wa, wb = a["atm_iv"] ** 2 * a["T"], b["atm_iv"] ** 2 * b["T"]
+        fv = (wb - wa) / (b["T"] - a["T"]) if b["T"] > a["T"] else None
+        mfv = None
+        if a["rep_var"] and b["rep_var"] and b["T"] > a["T"]:
+            mfv = (b["rep_var"] - a["rep_var"]) / (b["T"] - a["T"])
+        fwd.append({"a": a["expiry"], "b": b["expiry"], "da": a["days"], "db": b["days"],
+                    "atm": None if fv is None or fv <= 0 else round(math.sqrt(fv) * 100, 3), "atm_var": None if fv is None else round(fv, 6),
+                    "mf": None if mfv is None or mfv <= 0 else round(math.sqrt(mfv) * 100, 3)})
+    good = [e for e in E if e["fit_rmse"] <= 0.015]
+    pairs, viol = calendar_check([(e["expiry"], e["T"], e["svi"], tuple(e["k_range"]), e["fit_rmse"]) for e in good])
+    return {"tenors": tenors, "ratio_3m_1m": ratio, "state": state, "forward": fwd,
+            "calendar": {"pairs": pairs, "violations": viol, "material": sum(1 for v in viol if not v["within_fit_error"]), "atm_negative_forward": sum(1 for f in fwd if f["atm_var"] is not None and f["atm_var"] < 0),
+                         "slices": len(good), "note": "fitted SVI smiles, strikes quoted by both expiries; w(k,T) must not fall with T"}}
+
+
 def market_open(now_et: dt.datetime) -> bool:
     return now_et.weekday() < 5 and dt.time(9, 30) <= now_et.time() <= dt.time(16, 15)
 
 
-def snapshot(chain: dict, quotes: dict, hist: dict) -> dict:
+def snapshot(chain: dict, quotes: dict, hist: dict | None, ix: str = "SPX") -> dict:
+    cfg = INDEX[ix]
     now = dt.datetime.now(dt.timezone.utc)
     spx = chain["data"]
     S = float(spx["current_price"])
@@ -186,7 +255,7 @@ def snapshot(chain: dict, quotes: dict, hist: dict) -> dict:
     # group the chain by expiry; prefer PM-settled SPXW, keep AM-settled SPX only where no SPXW exists
     by = {}
     for o in chain["data"]["options"]:
-        m = SYM.match(o["option"])
+        m = cfg["re"].match(o["option"])
         if not m:
             continue
         root, yy, mm, dd, cp, kk = m.groups()
@@ -194,20 +263,22 @@ def snapshot(chain: dict, quotes: dict, hist: dict) -> dict:
         by.setdefault(d, {}).setdefault(root, []).append((cp, int(kk) / 1000.0, o))
     expiries = []
     for d in sorted(by):
-        root = "SPXW" if "SPXW" in by[d] else "SPX"
-        t_exp = dt.datetime.combine(d, dt.time(16, 0) if root == "SPXW" else dt.time(9, 30), NY)
+        root = cfg["pm"] if cfg["pm"] in by[d] else cfg["am"]
+        if root not in by[d]:
+            continue
+        t_exp = dt.datetime.combine(d, dt.time(16, 0) if root == cfg["pm"] else dt.time(9, 30), NY)
         T = (t_exp - t0).total_seconds() / YEAR
         if T <= 1 / (365 * 24):                        # < 1 hour left: skip
             continue
         rows = {}
         for cp, K, o in by[d][root]:
             rows.setdefault(K, {})[cp] = o
-        extra = None                                   # AM-settled SPX monthlies on a date that also has SPXW:
-        if root == "SPXW" and "SPX" in by[d]:          # not used for the surface fit, but their open interest counts
+        extra = None                                   # AM-settled monthlies on a date that also has a PM expiry:
+        if root == cfg["pm"] and cfg["am"] in by[d]:   # not used for the surface fit, but their open interest counts
             T_am = (dt.datetime.combine(d, dt.time(9, 30), NY) - t0).total_seconds() / YEAR
             if T_am > 1 / (365 * 24):
                 am = {}
-                for cp, K, o in by[d]["SPX"]:
+                for cp, K, o in by[d][cfg["am"]]:
                     am.setdefault(K, {})[cp] = o
                 extra = (am, T_am)
         expiries.append((d, root, T, rows, extra))
@@ -298,7 +369,7 @@ def snapshot(chain: dict, quotes: dict, hist: dict) -> dict:
         straddle = float(np.interp(F, Ks[both], (C + P)[both]))
         days = (d - t0_date).days
         out_exp.append({
-            "expiry": d.isoformat(), "root": root, "settle": "PM" if root == "SPXW" else "AM", "days": days, "T": round(T, 6),
+            "expiry": d.isoformat(), "root": root, "settle": "PM" if root == cfg["pm"] else "AM", "days": days, "T": round(T, 6),
             "F": round(F, 2), "D": round(D, 6), "r": round(r, 4), "q": round(q, 4), "atm_iv": round(atm_iv, 5),
             "rep_var": round(rep_var, 8) if np.isfinite(rep_var) else None,
             "rep_move": round(math.sqrt(rep_var), 6) if np.isfinite(rep_var) and rep_var > 0 else None,
@@ -351,7 +422,7 @@ def snapshot(chain: dict, quotes: dict, hist: dict) -> dict:
             if zero is None or abs(z - S) < abs(zero - S): zero = z
     near = (Kx >= S * 0.9) & (Kx <= S * 1.08)
     gA, gB = gex(S, "A"), gex(S, "B")
-    kbin = np.round(Kx / 25) * 25                        # aggregate 5-point strikes into 25-point bins
+    kbin = np.round(Kx / cfg["bin"]) * cfg["bin"]        # aggregate strikes into bins (SPX 25, NDX 100 points)
     by_strike = [[float(b_), float(gA[near & (kbin == b_)].sum()), float(gB[near & (kbin == b_)].sum())] for b_ in np.unique(kbin[near])]
 
     # ---- surface grid (SVI, inside each expiry's quoted range only)
@@ -377,6 +448,7 @@ def snapshot(chain: dict, quotes: dict, hist: dict) -> dict:
     vix = {k_: {"level": float(v["current_price"]), "change": float(v.get("price_change") or 0)} for k_, v in quotes.items()}
     now_et = now.astimezone(NY)
     return {
+        "index": ix,
         "meta": {
             "version": VERSION, "generated_utc": now.isoformat(timespec="seconds"), "cboe_timestamp": chain.get("timestamp"),
             "valuation_time_et": t0.isoformat(timespec="minutes"), "market_open": market_open(now_et),
@@ -389,9 +461,10 @@ def snapshot(chain: dict, quotes: dict, hist: dict) -> dict:
         "surface": {"kf": [float(x) for x in kf], "expiry": [e["expiry"] for e in surf_exp], "days": [e["days"] for e in surf_exp], "T": [e["T"] for e in surf_exp], "iv": surface},
         "smiles": smiles,
         "checks": {"butterfly_violations": sum(1 for e in out_exp if not e["butterfly_ok"]), "calendar_violations_atm": cal_viol, "calendar_pairs": cal_pairs, "expiries": len(out_exp),
-                   "replication_vs_cboe": replication_check(out_exp, quotes)},
+                   "replication_vs_cboe": replication_check(out_exp, quotes, cfg["rep"])},
+        "term": term_block(out_exp),
         "gex": {"spot_grid": [round(float(x), 2) for x in grid], "A": [round(x) for x in prof["A"]], "B": [round(x) for x in prof["B"]],
-                "zero_gamma_A": None if zero is None else round(float(zero), 2), "by_strike": [[k_, round(a_), round(b_)] for k_, a_, b_ in by_strike],
+                "zero_gamma_A": None if zero is None else round(float(zero), 2), "by_strike": [[k_, round(a_), round(b_)] for k_, a_, b_ in by_strike], "bin": cfg["bin"],
                 "note": "A: dealers long calls, short puts. B: dealers short all options. Open interest is from the prior day (OCC)."},
         "buckets": {"classes": [c[0] for c in DTE_CLASSES], "buckets": [b[0] for b in BUCKETS],
                     "data": {c: {b: {k_: round(v, 0) for k_, v in buckets[c][b].items()} for b in buckets[c]} for c in buckets}},
@@ -528,11 +601,18 @@ def main():
         ndx_chain = json.loads(get(f"{BASE}/options/_NDX.json"))
     except Exception as e:
         print("NDX chain unavailable:", e); ndx_chain = None
+    ndx_snap = None
+    if ndx_chain:
+        try:
+            ndx_snap = snapshot(ndx_chain, {k: quotes[k] for k in ("VXN",) if k in quotes}, None, ix="NDX")
+            ndx_snap.pop("history", None)
+        except Exception as e:  # the SPX page must not fail because of the second index
+            print("NDX snapshot failed:", e); ndx_snap = None
     try:
         spx_ohlc = implied_range.cboe_spx_ohlc()
     except Exception as e:
         print("SPX OHLC unavailable:", e); spx_ohlc = []
-    rng = implied_range.build(snap, quotes, ndx_chain, hist)
+    rng = implied_range.build(snap, quotes, ndx_chain, hist, ndx_snap)
     rng["calibration"] = implied_range.calibration_block(spx_ohlc, ndx_ohlc, hs)
     snap["range"] = rng
     os.makedirs(a.out, exist_ok=True)
@@ -552,6 +632,10 @@ def main():
                 "next_expiry": e0.get("expiry"), "next_move": e0.get("rep_move"), "zero_gamma_A": snap["gex"]["zero_gamma_A"],
                 "v30": pt["v30"], "atm_term": [[e["days"], e["atm_iv"]] for e in snap["expiries"] if e["days"] <= 400]}
         with open(os.path.join(hdir, f"{day}.json"), "w", encoding="utf-8") as f: json.dump(summ, f, separators=(",", ":"))
+    if ndx_snap:
+        nb = json.dumps(ndx_snap, separators=(",", ":"), allow_nan=False)
+        with open(os.path.join(a.out, "ndx.js"), "w", encoding="utf-8") as f: f.write("window.__NDX__=" + nb + ";" + chr(10))
+        snap["ndx_meta"] = {"generated_utc": ndx_snap["meta"]["generated_utc"], "valuation_time_et": ndx_snap["meta"]["valuation_time_et"], "expiries": len(ndx_snap["expiries"])}
     snap["intraday"] = update_intraday(os.path.join(a.out, "intraday.json"), snap)
     snap["bars"] = update_bars(os.path.join(a.out, "bars.json"))
     snap["archive"] = compile_archive(hdir)
@@ -560,7 +644,7 @@ def main():
     with open(os.path.join(a.out, "latest.js"), "w", encoding="utf-8") as f: f.write("window.__LIVE__=" + body + ";" + chr(10))
     e0 = snap["expiries"][0] if snap["expiries"] else {}
     print(f"SPX {snap['spot']['level']:.2f} | expiries {len(snap['expiries'])} | next {e0.get('expiry')} move ±{(e0.get('rep_move') or 0)*100:.2f}% "
-          f"| zero-gamma(A) {snap['gex']['zero_gamma_A']} | intraday {len(snap['intraday'])} pts | bars {len(snap['bars'])} sessions | archive {len(snap['archive'])} d | range ES {snap['range']['contracts']['ES']['fair']} NQ {snap['range']['contracts']['NQ']['fair']} | calib {list(snap['range']['calibration'])} | {len(body)/1024:.0f} KB")
+          f"| zero-gamma(A) {snap['gex']['zero_gamma_A']} | intraday {len(snap['intraday'])} pts | bars {len(snap['bars'])} sessions | archive {len(snap['archive'])} d | range ES {snap['range']['contracts']['ES']['fair']} NQ {snap['range']['contracts']['NQ']['fair']} | calib {list(snap['range']['calibration'])} | NDX {'ok ' + str(len(ndx_snap['expiries'])) + ' expiries, VXN check ' + str(ndx_snap['checks']['replication_vs_cboe']) if ndx_snap else 'n/a'} | term {snap['term']['state']} cal-viol {len(snap['term']['calendar']['violations'])} | {len(body)/1024:.0f} KB")
 
 
 if __name__ == "__main__":
