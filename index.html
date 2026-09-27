@@ -704,10 +704,10 @@ footer p{max-width:860px}
     <div class="fig-head"><div><p class="fig-t">Try it: random-walk sessions with a known σ</p><p class="fig-s">Each session is a driftless random walk of 390 one-minute steps whose daily σ equals the implied one — the world in which the ladder is exactly right. Shown: 60 of the sessions; statistics over all of them.</p></div>
       <div class="fig-tools"><button type="button" class="btn btn-s" id="rwGo">↻ New sample</button><button type="button" class="icon-btn" data-expand aria-label="Enlarge chart" title="Enlarge">⤢</button></div></div>
     <div class="fig-ctl"><div class="rw-k"><div class="row-h"><label for="rwK">Level k</label><output for="rwK"></output></div><input type="range" id="rwK" min="0.25" max="2" step="0.25" value="1"></div><div class="seg" id="rwN" role="group" aria-label="Number of sessions"><button type="button" data-v="500">500</button><button type="button" data-v="2000" aria-pressed="true">2,000</button><button type="button" data-v="10000">10,000</button></div></div>
-    <ul class="legend"><li><span class="key k-ref"></span>Did not touch +kσ</li><li><span class="key k-s1"></span>Touched, closed back inside (held)</li><li><span class="key k-s2"></span>Touched, closed beyond (broke)</li></ul>
+    <ul class="legend"><li><span class="key k-ref"></span>Touched neither level</li><li><span class="key k-s1"></span>Touched a level, closed back inside (held)</li><li><span class="key k-s2"></span>Touched a level, closed beyond it (broke)</li></ul>
     <div class="chart" data-label="Simulated random-walk sessions with plus and minus k sigma levels."></div>
     <div class="stats" style="margin-top:12px" aria-live="polite">
-      <div class="stat"><div class="l">Touched +kσ</div><div class="v" id="rwT">–</div><div class="s" id="rwTS">–</div></div>
+      <div class="stat"><div class="l">Touched, per level (+kσ and −kσ)</div><div class="v" id="rwT">–</div><div class="s" id="rwTS">–</div></div>
       <div class="stat"><div class="l">Held (closed back inside)</div><div class="v" id="rwH">–</div><div class="s" id="rwHS">theory: 50 %</div></div>
       <div class="stat"><div class="l">Closed inside ±kσ</div><div class="v" id="rwI">–</div><div class="s" id="rwIS">–</div></div>
     </div>
@@ -3163,14 +3163,18 @@ function rwSim(nSess, steps, k, seed, keepN = 60) {
   const rnd = () => { st = (st + 0x6D2B79F5) >>> 0; let t = st; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
   let spare = null;
   const gauss = () => { if (spare != null) { const v = spare; spare = null; return v; } let u = 0; while (u === 0) u = rnd(); const r = Math.sqrt(-2 * Math.log(u)), a = 2 * Math.PI * rnd(); spare = r * Math.sin(a); return r * Math.cos(a); };
-  const sc = 1 / Math.sqrt(steps); let T = 0, Hd = 0, I = 0; const paths = [];
+  // both levels count, each touch is one event (as the level lab's "Both"): +k held if the close < +k, -k held if the close > -k
+  const sc = 1 / Math.sqrt(steps); let T = 0, Hd = 0, I = 0, Tu = 0, Td = 0; const paths = [];
   for (let s = 0; s < nSess; s++) {
-    let w = 0, mx = 0; const keep = s < keepN, p = keep ? [0] : null;
-    for (let j = 1; j <= steps; j++) { w += gauss() * sc; if (w > mx) mx = w; if (keep) p.push(w); }
-    const touched = mx >= k; if (touched) { T++; if (w < k) Hd++; } if (Math.abs(w) <= k) I++;
-    if (keep) paths.push({ p, o: touched ? (w < k ? 'held' : 'broke') : 'none' });
+    let w = 0, mx = 0, mn = 0; const keep = s < keepN, p = keep ? [0] : null;
+    for (let j = 1; j <= steps; j++) { w += gauss() * sc; if (w > mx) mx = w; if (w < mn) mn = w; if (keep) p.push(w); }
+    const tu = mx >= k, td = mn <= -k;
+    if (tu) { T++; Tu++; if (w < k) Hd++; }
+    if (td) { T++; Td++; if (w > -k) Hd++; }
+    if (Math.abs(w) <= k) I++;
+    if (keep) paths.push({ p, o: !(tu || td) ? 'none' : (tu && w >= k) || (td && w <= -k) ? 'broke' : 'held' });
   }
-  return { n: nSess, T, H: Hd, I, paths };
+  return { n: nSess, T, H: Hd, I, Tu, Td, paths };
 }
 window.rwSim = rwSim;
 
@@ -3410,11 +3414,11 @@ INITS.range = () => LIVE.on(d0 => {
     });
     [k, -k].forEach(v => { S('line', { x1: plot.x0, x2: plot.x1, y1: y(v), y2: y(v), class: 'guide' }, svg); txt(svg, plot.x1 + 6, y(v) + 4, (v > 0 ? '+' : '−') + k + 'σ', 'lbl-strong'); });
     const th = 2 * (1 - Ncdf(k)), kd = k + 0.5826 / Math.sqrt(390), thd = 2 * (1 - Ncdf(kd)), hd = 1 - (1 - Ncdf(k)) / thd;   // Broadie–Glasserman continuity correction
-    $('rwT').textContent = pct(r.T / r.n); $('rwTS').textContent = `theory ${pct(th)} · with 1-minute steps ≈ ${pct(thd)}`;
+    $('rwT').textContent = pct(r.T / (2 * r.n)); $('rwTS').textContent = `theory ${pct(th)} · with 1-minute steps ≈ ${pct(thd)} · up ${r.Tu.toLocaleString('en-US')}, down ${r.Td.toLocaleString('en-US')}`;
     $('rwH').textContent = r.T ? pct(r.H / r.T) : '–';
     const ci = LB.wilson(r.H, r.T); $('rwHS').textContent = `theory 50 % · with 1-minute steps ≈ ${pct(hd)} · 95 % CI ${pct(ci[0], 0)}–${pct(ci[1], 0)}`;
     $('rwI').textContent = pct(r.I / r.n); $('rwIS').textContent = `theory 2Φ(${k}) − 1 = ${pct(2 * Ncdf(k) - 1)}`;
-    $('rwRead').textContent = `${r.n.toLocaleString('en-US')} simulated sessions: +${k}σ was touched ${r.T.toLocaleString('en-US')} times and ${r.T ? pct(r.H / r.T) : '–'} of those touches closed back inside — pure chance. Looking at the path only once a minute misses a little of its true maximum (continuity correction 0.5826 σ√Δt), so the simulation finds slightly fewer touches than continuous-time theory and a held share slightly below 50 %. The real index is observed almost continuously.`;
+    $('rwRead').textContent = `${r.n.toLocaleString('en-US')} simulated sessions: the ±${k}σ levels were touched ${r.T.toLocaleString('en-US')} times (+${k}σ ${r.Tu.toLocaleString('en-US')}, −${k}σ ${r.Td.toLocaleString('en-US')}) and ${r.T ? pct(r.H / r.T) : '–'} of those touches closed back inside — pure chance. A path that touches both levels counts twice and is drawn orange if it closed beyond either. Looking at the path only once a minute misses a little of its true maximum (continuity correction 0.5826 σ√Δt), so the simulation finds slightly fewer touches than continuous-time theory and a held share slightly below 50 %. The real index is observed almost continuously.`;
   }
   rwK.addEventListener('input', debounce(runRw, 120));
   segmented('rwN', v => { rwN = +v; runRw(); });
