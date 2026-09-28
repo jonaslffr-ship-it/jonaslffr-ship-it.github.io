@@ -161,11 +161,15 @@ def main():
     # from different sessions) and a 30-day vol 5 points off Cboe's are both blocked
     g_ok, g_lines = ls.data_gate(snap)
     shifted = synthetic_chain(); shifted["data"]["current_price"] = S * 1.006
+    shifted["timestamp"] = "2026-09-28 09:45:00"          # Monday's (overnight) quotes against Friday's 16:00 print
     g_sync, _ = ls.data_gate(ls.snapshot(shifted, quotes, None))
+    curb = synthetic_chain(); curb["data"]["current_price"] = S * 1.006   # same session, 16:00-16:15 curb: futures moved
+    g_curb, _ = ls.data_gate(ls.snapshot(curb, quotes, None))
     g_vix, _ = ls.data_gate(ls.snapshot(synthetic_chain(), {**quotes, "VIX": {"current_price": 25.0, "price_change": 0}}, None))
     print("  data gate, clean chain:", *g_lines, sep="\n    ")
     print(f"  data gate: clean -> {g_ok}, spot shifted +0.6 % -> {g_sync}, Cboe VIX 25 vs mine 20 -> {g_vix}")
-    if not g_ok or g_sync or g_vix: fails.append("data gate")
+    print(f"  data gate: same-session curb move +0.6 % after 16:00 -> {g_curb} (must pass: EOD archive on earnings evenings)")
+    if not g_ok or g_sync or g_vix or not g_curb: fails.append("data gate")
     # intraday bars mid-session: Cboe has 1-minute bars up to 10:16 ET -> slots up to 10:15 filled, 10:20-16:00 empty
     mins = [f"2026-09-28T{9 + m // 60:02d}:{m % 60:02d}:00" for m in range(31, 77)]
     feed = json.dumps({"data": [{"datetime": t, "price": {"close": 100 + i, "high": 101 + i, "low": 99 + i}}
@@ -180,6 +184,23 @@ def main():
                and all(v is None for v in b["SPX_h"][i15 + 1:]) and all(v is None for v in b["VIX9D"][i15 + 1:]))
     print(f"  intraday bars: last filled slot {b['t'][max(i for i, v in enumerate(b['SPX']) if v is not None)]}, no fill into the future -> {bars_ok}")
     if not bars_ok: fails.append("fetch_bars fills slots after the last Cboe bar")
+    # early close: PM expiry at 13:00, session over at 13:15; calibration dates start at the first session with an IV
+    ec_ok = (ls.pm_close(dt.date(2026, 11, 27)) == dt.time(13, 0) and ls.pm_close(dt.date(2026, 11, 30)) == dt.time(16, 0)
+             and not ls.market_open(dt.datetime(2026, 11, 27, 13, 30, tzinfo=ls.NY)) and ls.market_open(dt.datetime(2026, 11, 30, 13, 30, tzinfo=ls.NY)))
+    days_ = [(dt.date(2026, 1, 1) + dt.timedelta(i)).isoformat() for i in range(80)]
+    cal = ir.calibrate([[d_, 100, 101, 99, 100] for d_ in days_], {d_: 15.0 for d_ in days_[10:]})
+    cal_ok = cal is not None and cal["from"] == days_[11]
+    print(f"  early close 13:00 / session end 13:15: {ec_ok}; calibration 'from' = first counted session: {cal_ok}")
+    if not ec_ok: fails.append("early-close handling")
+    if not cal_ok: fails.append(f"calibrate from = {cal and cal['from']}, expected {days_[11]}")
+    # OHLC history fallback: a failed or empty fetch returns the last good copy, never an empty history
+    def boom(): raise TimeoutError("read timed out")
+    rows = [["2026-09-25", 1.0, 2.0, 0.5, 1.5]]
+    ls.last_good("_selftest", lambda: rows)
+    lg_ok = ls.last_good("_selftest", boom) == rows and ls.last_good("_selftest", lambda: []) == rows
+    os.remove(os.path.join(os.path.expanduser("~/.cache/vol-site"), "_selftest.json"))
+    print(f"  OHLC history fallback: time-out and empty response -> last good copy: {lg_ok}")
+    if not lg_ok: fails.append("last_good does not fall back to the last good copy")
     bad = [ts for ts, want in gth.items() if ls.overnight_quotes(ts) != want]
     print(f"  overnight-quote guard: {len(gth) - len(bad)}/{len(gth)} timestamps classified correctly")
     if bad: fails.append(f"overnight_quotes misclassifies {bad}")

@@ -113,11 +113,12 @@ def calibrate(ohlc: list, iv: dict, last_days: int | None = None) -> dict | None
     comparisons use simple returns (H / C0 - 1 >= k sigma etc.)."""
     rows = ohlc[-(last_days + 1):] if last_days else ohlc
     ins = np.zeros(len(K_LEVELS)); up = np.zeros(len(K_LEVELS)); dn = np.zeros(len(K_LEVELS))
-    n, rv, ivv = 0, 0.0, 0.0
+    n, rv, ivv, first = 0, 0.0, 0.0, None
     for prev, cur in zip(rows[:-1], rows[1:]):
         v = iv.get(prev[0])
         if not v or v <= 0:
             continue
+        first = first or cur[0]                    # first session actually counted (VIX1D starts in 2022)
         s = v / 100 / math.sqrt(252)
         c0 = prev[4]
         rc, rh, rl = cur[4] / c0 - 1, cur[2] / c0 - 1, cur[3] / c0 - 1
@@ -126,7 +127,7 @@ def calibrate(ohlc: list, iv: dict, last_days: int | None = None) -> dict | None
         n += 1; rv += rc * rc; ivv += s * s
     if n < 50:
         return None
-    return {"n": n, "from": rows[0][0], "to": rows[-1][0], "inside": (ins / n).round(4).tolist(),
+    return {"n": n, "from": first, "to": rows[-1][0], "inside": (ins / n).round(4).tolist(),
             "touch_up": (up / n).round(4).tolist(), "touch_dn": (dn / n).round(4).tolist(),
             "rv_over_iv": round(math.sqrt(rv / ivv), 4)}
 

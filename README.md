@@ -23,7 +23,7 @@ A single, dependency-free `index.html` (no build step): a dark-mode app with tab
 
 Images in `assets/`: profile picture (`avatar.jpg/.webp`, re-encoded without metadata) and the social preview card `og.jpg` (1200×630, used by LinkedIn/WhatsApp/X link previews).
 
-Deep links: `#range` (alias `#levels`; sections `#rg-math`, `#rg-lab`, `#rg-dist`), `#surface`, `#greeks`, `#dealer` (alias `#lab`), `#odte`, `#realized`, `#backtest`, `#research`, `#f1`, `#f2`, `#standards`, `#about`.
+Deep links: `#live` (alias `#market`), `#range` (aliases `#levels`, `#ranges`, `#em`; sections `#rg-math`, `#rg-lab`, `#rg-dist`), `#surface` (alias `#vol`), `#greeks`, `#dealer` (alias `#lab`), `#odte`, `#realized`, `#backtest` (aliases `#overfit`, `#backtests`), `#research`, `#f1`, `#f2`, `#standards`, `#about` (alias `#teaching`).
 
 Only external resource at runtime: KaTeX 0.18.9 from jsDelivr (pinned, SRI hashes) for formula rendering. Live data is served from the same origin.
 

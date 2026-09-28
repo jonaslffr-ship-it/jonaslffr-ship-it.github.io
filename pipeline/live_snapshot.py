@@ -259,8 +259,17 @@ def term_block(exps):
                          "slices": len(good), "note": "fitted SVI smiles, strikes quoted by both expiries; w(k,T) must not fall with T"}}
 
 
+# NYSE early closes (13:00 ET): PM expiries settle at 13:00, options trade to 13:15.
+EARLY_CLOSE = {dt.date(2026, 11, 27), dt.date(2026, 12, 24), dt.date(2027, 11, 26)}   # ponytail: extend once a year
+
+
+def pm_close(d: dt.date) -> dt.time:
+    return dt.time(13, 0) if d in EARLY_CLOSE else dt.time(16, 0)
+
+
 def market_open(now_et: dt.datetime) -> bool:
-    return now_et.weekday() < 5 and dt.time(9, 30) <= now_et.time() <= dt.time(16, 15)
+    end = dt.time(13, 15) if now_et.date() in EARLY_CLOSE else dt.time(16, 15)
+    return now_et.weekday() < 5 and dt.time(9, 30) <= now_et.time() <= end
 
 
 def snapshot(chain: dict, quotes: dict, hist: dict | None, ix: str = "SPX") -> dict:
@@ -285,8 +294,8 @@ def snapshot(chain: dict, quotes: dict, hist: dict | None, ix: str = "SPX") -> d
         root = cfg["pm"] if cfg["pm"] in by[d] else cfg["am"]
         if root not in by[d]:
             continue
-        t_exp = dt.datetime.combine(d, dt.time(16, 0) if root == cfg["pm"] else dt.time(9, 30), NY)
-        T = (t_exp - t0).total_seconds() / YEAR
+        t_exp = dt.datetime.combine(d, pm_close(d) if root == cfg["pm"] else dt.time(9, 30), NY)
+        T = (t_exp.timestamp() - t0.timestamp()) / YEAR   # real elapsed time: same-tzinfo subtraction ignores a DST switch
         if T <= 1 / (365 * 24):                        # < 1 hour left: skip
             continue
         rows = {}
@@ -294,7 +303,7 @@ def snapshot(chain: dict, quotes: dict, hist: dict | None, ix: str = "SPX") -> d
             rows.setdefault(K, {})[cp] = o
         extra = None                                   # AM-settled monthlies on a date that also has a PM expiry:
         if root == cfg["pm"] and cfg["am"] in by[d]:   # not used for the surface fit, but their open interest counts
-            T_am = (dt.datetime.combine(d, dt.time(9, 30), NY) - t0).total_seconds() / YEAR
+            T_am = (dt.datetime.combine(d, dt.time(9, 30), NY).timestamp() - t0.timestamp()) / YEAR
             if T_am > 1 / (365 * 24):
                 am = {}
                 for cp, K, o in by[d][cfg["am"]]:
@@ -624,12 +633,20 @@ def data_gate(snap: dict) -> tuple[bool, list[str]]:
     sync = E[0]["F"] / S - 1 if E else float("nan")
     ins = [e["spline_inside"] for e in E if e.get("spline_inside") is not None and e["days"] <= 400]
     fit = float(np.median(ins)) if ins else 0.0
-    checks = [("forward vs spot, nearest expiry", abs(sync) <= 0.0025, f"F/S - 1 = {sync * 100:+.3f} % (limit +-0.25 %)"),
+    # After 16:00 the index print is frozen while the options trade on to 16:15 and follow the futures (earnings
+    # evenings): a wide bound then - but only if quotes and print are from the SAME session. Monday's overnight
+    # quotes against Friday's close (the case this check exists for) keep the tight bound.
+    m = snap["meta"]
+    vint = (dt.datetime.fromisoformat(m["cboe_timestamp"]).replace(tzinfo=dt.timezone.utc) - dt.timedelta(minutes=15)).astimezone(NY)
+    curb = m["valuation_time_et"][11:16] >= "16:00" and vint.date().isoformat() == m["valuation_time_et"][:10] and vint.time() < dt.time(20, 15)
+    lim = 0.02 if curb else 0.0025
+    checks = [("forward vs spot, nearest expiry", abs(sync) <= lim, f"F/S - 1 = {sync * 100:+.3f} % (limit +-{lim * 100:.2f} %)"),
               ("smile fit", fit >= 0.8, f"median share of strikes inside the bid-ask IV (spline) = {fit * 100:.0f} % (min 80 %)")]
     rep = next((c for c in snap["checks"]["replication_vs_cboe"] if c["days"] == 30), None)
     if rep:
-        checks.append((f"30-day vol vs Cboe {rep['index']}", abs(rep["mine"] - rep["cboe"]) <= 2.5,
-                       f"mine {rep['mine']:.2f} vs {rep['cboe']:.2f} (limit +-2.5 vol pts)"))
+        tol = max(2.5, 0.12 * rep["cboe"])   # the gap scales with the level: a fixed 2.5 would freeze the site in stress
+        checks.append((f"30-day vol vs Cboe {rep['index']}", abs(rep["mine"] - rep["cboe"]) <= tol,
+                       f"mine {rep['mine']:.2f} vs {rep['cboe']:.2f} (limit +-{tol:.1f} vol pts)"))
     return all(ok for _, ok, _ in checks), [f"GATE {'ok  ' if ok else 'FAIL'} {snap['index']} {n}: {d}" for n, ok, d in checks]
 
 
@@ -644,6 +661,27 @@ def overnight_quotes(cboe_timestamp: str) -> bool:
     return (wd < 5 and t < dt.time(9, 30)) or (wd in (6, 0, 1, 2, 3) and t >= dt.time(20, 15))
 
 
+def last_good(name: str, fetch) -> list:
+    """A five-year OHLC history, or the last good copy when the source fails. The copy lives in the GitHub Actions
+    cache (~/.cache/vol-site, see the workflow), never on the published site. Without it one Nasdaq time-out blanked
+    the Nasdaq-100 history, the NQ session chart, calibration and level study (2026-09-28)."""
+    path = os.path.join(os.path.expanduser("~/.cache/vol-site"), name + ".json")
+    try:
+        try:
+            rows = fetch()
+        except Exception:
+            time.sleep(5); rows = fetch()          # one retry: Nasdaq's API times out now and then
+        if not rows:
+            raise ValueError("empty response")
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f: json.dump(rows, f, separators=(",", ":"))
+        return rows
+    except Exception as e:
+        rows = json.load(open(path, encoding="utf-8")) if os.path.exists(path) else []
+        print(f"{name} unavailable ({e}): last good copy with {len(rows)} days")
+        return rows
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default=os.path.join(os.path.dirname(__file__), "..", "data", "live"))
@@ -656,10 +694,7 @@ def main():
     quotes = {s.strip("_"): quote(s) for s in ("_VIX1D", "_VIX9D", "_VIX", "_VIX3M", "_VVIX", "_VXN", "_NDX")}
     # five years of daily closes, aligned on S&P 500 trading days (VIX1D exists only since 2022)
     hs = {n: dict(history(n, days=1400)) for n in SERIES}
-    try:
-        ndx_ohlc = implied_range.nasdaq_ndx_history()           # Nasdaq's own API (Cboe does not serve NDX history)
-    except Exception as e:
-        print("NDX history unavailable:", e); ndx_ohlc = []
+    ndx_ohlc = last_good("ndx_ohlc", implied_range.nasdaq_ndx_history)   # Nasdaq's own API (Cboe does not serve NDX history)
     hs["NDX"] = {r[0]: r[4] for r in ndx_ohlc}
     dates = sorted(hs["SPX"])[-1260:]
     hist = {"dates": dates, **{n: [hs[n].get(d) for d in dates] for n in (*SERIES, "NDX")}}
@@ -684,10 +719,7 @@ def main():
                 print("NDX data gate failed: ndx.js not updated."); ndx_snap = None
         except Exception as e:  # the SPX page must not fail because of the second index
             print("NDX snapshot failed:", e); ndx_snap = None
-    try:
-        spx_ohlc = implied_range.cboe_spx_ohlc()
-    except Exception as e:
-        print("SPX OHLC unavailable:", e); spx_ohlc = []
+    spx_ohlc = last_good("spx_ohlc", implied_range.cboe_spx_ohlc)
     rng = implied_range.build(snap, quotes, ndx_chain, hist, ndx_snap)
     rng["calibration"] = implied_range.calibration_block(spx_ohlc, ndx_ohlc, hs)
     snap["range"] = rng
@@ -698,8 +730,9 @@ def main():
         with open(os.path.join(a.out, "study.js"), "w", encoding="utf-8") as f: f.write("window.__STUDY__=" + sb + ";" + chr(10))
     hdir = os.path.join(a.out, "history")
     # end-of-day archive (small summary), one file per trading date
-    now_et = dt.datetime.now(NY)
-    if snap["meta"]["valuation_time_et"][:10] == now_et.date().isoformat() and now_et.time() >= dt.time(16, 15):
+    # data vintage (feed time - 15 min delay), not wall clock: the 16:22 run still carries 16:07 data
+    vintage = dt.datetime.fromisoformat(snap["meta"]["cboe_timestamp"]).replace(tzinfo=dt.timezone.utc).astimezone(NY) - dt.timedelta(minutes=15)
+    if snap["meta"]["valuation_time_et"][:10] == vintage.date().isoformat() and vintage.time() >= dt.time(16, 15):
         day = snap["meta"]["valuation_time_et"][:10]
         os.makedirs(hdir, exist_ok=True)
         e0 = snap["expiries"][0] if snap["expiries"] else {}

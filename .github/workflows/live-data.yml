@@ -37,23 +37,38 @@ jobs:
         id: test
         continue-on-error: true
         run: python pipeline/test_live_snapshot.py
+      # A failed restore must not fall back to the committed files (a stale 2026-09-25 state): the rolling intraday
+      # records would be cut for good and the site could jump back in time. So: retries, 404 = not deployed yet, else stop.
       - name: Restore the intraday records and the last snapshot from the deployed site
         run: |
           for f in intraday.json bars.json latest.json latest.js ndx.js study.js; do
-            curl -sf "https://jonaslffr-ship-it.github.io/data/live/$f?t=$(date +%s)" -o "/tmp/$f"               && mv "/tmp/$f" "data/live/$f"               || echo "no deployed $f yet - keeping the committed one"
+            code=$(curl -s --retry 3 --retry-connrefused --retry-delay 3 -o "/tmp/$f" -w '%{http_code}' "https://jonaslffr-ship-it.github.io/data/live/$f?t=$(date +%s)")
+            if [ "$code" = 200 ]; then mv "/tmp/$f" "data/live/$f"
+            elif [ "$code" = 404 ]; then echo "no deployed $f yet - keeping the committed one"
+            else echo "::error::restoring $f failed (HTTP $code) - stopping, the deployed site stays as it is"; exit 1; fi
           done
+      # Last good five-year OHLC histories (Nasdaq's API times out now and then). Kept in the Actions cache, not published.
+      - name: Restore the last good OHLC histories
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/vol-site
+          key: ohlc-${{ github.run_id }}
+          restore-keys: ohlc-
       - name: Snapshot from Cboe delayed quotes
         if: steps.test.outcome == 'success'
         continue-on-error: true
         run: python pipeline/live_snapshot.py --out data/live
+      # rebase onto pushes that landed meanwhile; a failed push must not block the deploy
       - name: Commit end-of-day archive
+        continue-on-error: true
         run: |
           if [ -n "$(git status --porcelain data/live/history)" ]; then
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
             git add data/live/history
-            git commit -m "data: end-of-day volatility summary $(date -u +%F)"
-            git push
+            days=$(git diff --cached --name-only | xargs -n1 basename | sed 's/\.json$//' | tr '\n' ' ')
+            git commit -m "data: end-of-day volatility summary $days"
+            for i in 1 2 3; do git pull --rebase -q && git push -q && break; sleep 5; done
           fi
       - uses: actions/configure-pages@v6
       - uses: actions/upload-pages-artifact@v5
