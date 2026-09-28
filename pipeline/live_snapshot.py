@@ -556,7 +556,9 @@ BAR_SESSIONS = 5
 
 def fetch_bars() -> dict | None:
     """Latest session's 1-minute bars for all six series from Cboe, sampled every 5 minutes on a fixed
-    09:35-16:00 ET grid (last non-zero close at or before each slot; the first vol-index bar is often 0)."""
+    09:35-16:00 ET grid (last non-zero close at or before each slot; the first vol-index bar is often 0). Slots after
+    the last published bar stay empty: carrying the last close forward to 16:00 drew a flat line into the future and
+    made the chart read 'Live · 16:00 ET' mid-session (bug of 2026-09-28)."""
     slots = [f"{9 + (35 + 5 * i) // 60:02d}:{(35 + 5 * i) % 60:02d}" for i in range(78)]
     out, day = {"t": slots}, None
     for name in BAR_SERIES:
@@ -570,11 +572,12 @@ def fetch_bars() -> dict | None:
                 return None
             out[name] = [None] * len(slots); continue
         day = day or rows[0]["datetime"][:10]
+        end = pts[-1][0]                    # Cboe labels 1-minute bars by their end (09:31 ... 16:00)
         vals, j, last = [], 0, None
         for sl in slots:
             while j < len(pts) and pts[j][0] <= sl:
                 last = pts[j][1]; j += 1
-            vals.append(None if last is None else round(last, 2))
+            vals.append(None if last is None or sl > end else round(last, 2))
         out[name] = vals
         if name in ("SPX", "NDX"):          # true 5-minute extremes from the 1-minute highs / lows (touch detection)
             hl = sorted((r["datetime"][11:16], float(r["price"]["high"]), float(r["price"]["low"])) for r in rows
@@ -586,6 +589,7 @@ def fetch_bars() -> dict | None:
                     if hl[j][0] > prev:
                         bh = hl[j][1] if bh is None else max(bh, hl[j][1]); bl = hl[j][2] if bl is None else min(bl, hl[j][2])
                     j += 1
+                if sl > end: bh = bl = None     # partial slot: same cut-off as the closes
                 hi.append(None if bh is None else round(bh, 2)); lo.append(None if bl is None else round(bl, 2)); prev = sl
             out[name + "_h"], out[name + "_l"] = hi, lo
     return {"date": day, **out}

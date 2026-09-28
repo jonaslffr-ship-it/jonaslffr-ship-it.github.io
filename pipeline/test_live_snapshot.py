@@ -1,6 +1,6 @@
 """Known-answer tests for live_snapshot.py: a synthetic Black–Scholes chain in Cboe's JSON format.
 Run:  python pipeline/test_live_snapshot.py   (exit code 1 on failure; used as a gate in CI)"""
-import datetime as dt, math, os, sys
+import datetime as dt, json, math, os, sys
 import numpy as np
 from scipy.stats import norm
 
@@ -166,6 +166,20 @@ def main():
     print("  data gate, clean chain:", *g_lines, sep="\n    ")
     print(f"  data gate: clean -> {g_ok}, spot shifted +0.6 % -> {g_sync}, Cboe VIX 25 vs mine 20 -> {g_vix}")
     if not g_ok or g_sync or g_vix: fails.append("data gate")
+    # intraday bars mid-session: Cboe has 1-minute bars up to 10:16 ET -> slots up to 10:15 filled, 10:20-16:00 empty
+    mins = [f"2026-09-28T{9 + m // 60:02d}:{m % 60:02d}:00" for m in range(31, 77)]
+    feed = json.dumps({"data": [{"datetime": t, "price": {"close": 100 + i, "high": 101 + i, "low": 99 + i}}
+                                for i, t in enumerate(mins)]}).encode()
+    get0, ls.get = ls.get, lambda url, tries=3: feed
+    try:
+        b = ls.fetch_bars()
+    finally:
+        ls.get = get0
+    i15 = b["t"].index("10:15")
+    bars_ok = (b["SPX"][i15] == 144 and b["SPX_h"][i15] == 145 and all(v is None for v in b["SPX"][i15 + 1:])
+               and all(v is None for v in b["SPX_h"][i15 + 1:]) and all(v is None for v in b["VIX9D"][i15 + 1:]))
+    print(f"  intraday bars: last filled slot {b['t'][max(i for i, v in enumerate(b['SPX']) if v is not None)]}, no fill into the future -> {bars_ok}")
+    if not bars_ok: fails.append("fetch_bars fills slots after the last Cboe bar")
     bad = [ts for ts, want in gth.items() if ls.overnight_quotes(ts) != want]
     print(f"  overnight-quote guard: {len(gth) - len(bad)}/{len(gth)} timestamps classified correctly")
     if bad: fails.append(f"overnight_quotes misclassifies {bad}")

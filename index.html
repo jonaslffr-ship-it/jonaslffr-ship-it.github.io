@@ -3030,8 +3030,8 @@ function initHL(d) {
       if (pts.length > 1) S('path', { d: linePath(pts.map(p => p[0]), pts.map(p => p[1]), x, y), class: 'ln ln-s1' }, svg);
       pts.forEach(p => S('circle', { cx: x(p[0]), cy: y(p[1]), r: 3.5, class: 'ring f-s1' }, svg));
     } else {
-      const dense = pts.length === n;
-      if (dense) S('path', { d: linePath(xs, axis.map(e => e.v), x, y) + `L${x(n - 1)},${plot.y1}L${x(0)},${plot.y1}Z`, class: 'wash-s1' }, svg);
+      const a0 = pts.length ? pts[0][0] : 0, a1 = pts.length ? pts[pts.length - 1][0] : -1, dense = pts.length > 1 && pts.length === a1 - a0 + 1;   // gap-free up to the last bar (the rest of a running session stays empty)
+      if (dense) S('path', { d: linePath(xs, axis.map(e => e.v), x, y) + `L${x(a1)},${plot.y1}L${x(a0)},${plot.y1}Z`, class: 'wash-s1' }, svg);
       S('path', { d: linePath(xs, axis.map(e => e.v), x, y), class: 'ln ln-s1' }, svg);
     }
     if (cur) {
