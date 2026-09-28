@@ -5,8 +5,8 @@ Fetches the SPX/SPXW option chain and the VIX family from Cboe's public delayed-
 endpoints and publishes DERIVED analytics only:
 
   * forward, discount factor, implied rate and dividend yield per expiry (put-call parity regression)
-  * own Black-76 implied vols from mid quotes, raw-SVI fit per expiry, fit quality
-    (share of strikes whose model IV lies inside the bid-ask IV), butterfly check
+  * own Black-76 implied vols from mid quotes, raw-SVI fit and a spline through the quotes per expiry, fit quality
+    (share of strikes whose model IV lies inside the bid-ask IV), butterfly check for both
   * model-free implied variance to each expiry (Cboe VIX methodology incl. zero-bid rule)
   * dealer gamma exposure by strike and across spot under two stated sign conventions, zero-gamma level
   * open interest / volume / premium shares by delta bucket and days-to-expiry class
@@ -27,6 +27,7 @@ _sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
 import implied_range  # noqa: E402  (sibling module)
 
 import numpy as np
+from scipy.interpolate import UnivariateSpline
 from scipy.optimize import brentq, least_squares
 from scipy.special import ndtr
 from scipy.stats import norm
@@ -134,7 +135,25 @@ def svi_g(p, k):
     w = a + b * (rho * x + R)
     w1 = b * (rho + x / R)
     w2 = b * s * s / R ** 3
+    return durrleman_g(k, w, w1, w2)
+
+
+def durrleman_g(k, w, w1, w2):
+    """Butterfly-arbitrage density condition on total variance w(k): g >= 0 everywhere (Gatheral & Jacquier 2014)."""
     return (1 - k * w1 / (2 * w)) ** 2 - w1 * w1 / 4 * (1 / w + 0.25) + w2 / 2
+
+
+def fit_spline(k, iv, iv_bid, iv_ask, T, tol=0.25):
+    """Market smile: the smoothest cubic spline on total variance whose residuals to the mid quotes, in units of the
+    half bid-ask spread, have mean square <= tol (0.25 -> RMS half a half-spread; FITPACK adds knots only as needed).
+    Raw SVI has five parameters and misses SPX quotes a few hundredths of a vol point wide by a smooth, systematic
+    wave; this spline stays inside them without chasing noise in wide long-dated quotes. Valid only inside the quoted
+    range (never extrapolated). k must be strictly increasing (it is: strikes are sorted and unique)."""
+    half_w = iv * T * np.clip(np.nan_to_num(iv_ask - iv_bid, nan=0.02), 0.0005, 0.2)   # half spread in w units
+    try:
+        return UnivariateSpline(k, iv * iv * T, w=1 / half_w, k=3, s=tol * len(k))
+    except ValueError:
+        return None
 
 
 def fit_svi(k, iv, iv_bid, iv_ask, T):
@@ -334,11 +353,18 @@ def snapshot(chain: dict, quotes: dict, hist: dict | None, ix: str = "SPX") -> d
         p = fit_svi(k, iv, ivb, iva, T)
         if p is None:
             continue
+        share_in = lambda f: float(np.mean((f >= np.nan_to_num(ivb, nan=0.0) - 1e-9) & (f <= np.nan_to_num(iva, nan=9.0) + 1e-9)))
         iv_fit = np.sqrt(np.maximum(svi_w(p, k), 1e-12) / T)
-        inside = float(np.mean((iv_fit >= np.nan_to_num(ivb, nan=0.0) - 1e-9) & (iv_fit <= np.nan_to_num(iva, nan=9.0) + 1e-9)))
+        inside = share_in(iv_fit)
         rmse = float(np.sqrt(np.mean((iv_fit - iv) ** 2)))
         kg = np.linspace(k.min() - 0.05, k.max() + 0.05, 200)
         bfly_ok = bool(np.all(svi_g(p, kg) >= -1e-9))
+        sp = fit_spline(k, iv, ivb, iva, T)
+        iv_sp, sp_bfly_ok = np.full(len(k), np.nan), None
+        if sp is not None:
+            iv_sp = np.sqrt(np.maximum(sp(k), 1e-12) / T)
+            kq = np.linspace(k.min(), k.max(), 400); wq = sp(kq)
+            sp_bfly_ok = bool(np.all(wq > 0) and np.all(durrleman_g(kq, wq, sp(kq, 1), sp(kq, 2)) >= -1e-9))
         atm_iv = float(math.sqrt(max(svi_w(p, 0.0), 1e-12) / T))
 
         # model-free implied variance (Cboe VIX methodology, zero-bid truncation)
@@ -374,14 +400,17 @@ def snapshot(chain: dict, quotes: dict, hist: dict | None, ix: str = "SPX") -> d
             "rep_var": round(rep_var, 8) if np.isfinite(rep_var) else None,
             "rep_move": round(math.sqrt(rep_var), 6) if np.isfinite(rep_var) and rep_var > 0 else None,
             "straddle_move": round(straddle / (math.sqrt(2 / math.pi) * F), 6),
-            "svi": [round(float(x), 6) for x in p], "fit_inside": round(inside, 3), "fit_rmse": round(rmse, 5), "n": int(len(k)), "parity_ok": bool(parity_ok),
+            "svi": [round(float(x), 9) for x in p], "fit_inside": round(inside, 3), "fit_rmse": round(rmse, 5), "n": int(len(k)), "parity_ok": bool(parity_ok),
+            "spline_inside": round(share_in(iv_sp), 3) if sp is not None else None, "spline_rmse": round(float(np.sqrt(np.mean((iv_sp - iv) ** 2))), 5) if sp is not None else None,
+            "spline_butterfly_ok": sp_bfly_ok,
             "k_range": [round(float(k.min()), 4), round(float(k.max()), 4)], "butterfly_ok": bfly_ok,
         })
         if PUBLISH_POINTS:
             smiles.append({"expiry": d.isoformat(), "days": days,
                            "pts": [[round(float(math.exp(a) * 100), 2), round(float(b) * 100, 3),
                                     None if not np.isfinite(c) else round(float(c) * 100, 3),
-                                    None if not np.isfinite(e) else round(float(e) * 100, 3)] for a, b, c, e in zip(k, iv, ivb, iva)]})
+                                    None if not np.isfinite(e) else round(float(e) * 100, 3),
+                                    None if not np.isfinite(f) else round(float(f) * 100, 3)] for a, b, c, e, f in zip(k, iv, ivb, iva, iv_sp)]})
 
         # per-strike inputs for gamma exposure and moneyness buckets (sigma from the SVI fit, clamped to quoted range);
         # includes AM-settled monthlies that share the date, valued with their own (shorter) time to settlement

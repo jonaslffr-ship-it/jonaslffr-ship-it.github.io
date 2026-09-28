@@ -525,10 +525,10 @@ footer p{max-width:860px}
       <div class="cbar" id="lvBar"></div>
     </div>
     <div class="grid-2" style="margin-top:18px">
-      <figure class="fig card pad-s" id="figLvSmile"><p class="fig-t">Smile: market vs. SVI fit</p><p class="fig-s" id="lvSmileSub">Bid–ask implied vol per strike (own Black-76 inversion) and the fitted SVI curve.</p>
+      <figure class="fig card pad-s" id="figLvSmile"><p class="fig-t">Smile: market, spline and SVI</p><p class="fig-s" id="lvSmileSub">Bid–ask implied vol per strike (own Black-76 inversion), a smoothing spline through the quotes and the five-parameter SVI fit.</p>
         <div class="chips" id="lvExp" style="margin-bottom:10px"></div>
-        <ul class="legend"><li><span class="key k-ref"></span>Bid–ask IV (market)</li><li><span class="key k-s1"></span>SVI fit</li></ul>
-        <div class="chart" data-label="Implied volatility smile of one expiry: market bid-ask range and SVI fit."></div>
+        <ul class="legend"><li><span class="key k-ref"></span>Bid–ask IV (market)</li><li><span class="key k-s1"></span>Spline through the quotes</li><li><span class="key k-s2"></span>SVI fit (dashed)</li></ul>
+        <div class="chart" data-label="Implied volatility smile of one expiry: market bid-ask range, smoothing spline and SVI fit."></div>
         <p class="read" id="lvSmileRead"></p>
         <details class="tv"><summary>Data table</summary><div class="tbl"></div></details></figure>
       <div class="stack">
@@ -2755,20 +2755,24 @@ INITS.live = () => LIVE.on(d => {
     const base = chartBase(hostS, { height: 250, m: { l: 40 }, x: [x0, x1], y: niceDomain(Math.min(...all), Math.max(...all), 5), xTitle: 'Strike, % of forward', yFmt: v => v.toFixed(0) + '%', xFmt: v => v.toFixed(0) + '%' });
     const { svg, x, y, plot } = base;
     pts.forEach(p => { if (p[2] != null && p[3] != null) S('line', { x1: x(p[0]), x2: x(p[0]), y1: y(p[2]), y2: y(p[3]), class: 'ln-thin ln-ref', 'stroke-opacity': 0.8 }, svg); else S('circle', { cx: x(p[0]), cy: y(p[1]), r: 1.5, class: 'f-ref' }, svg); });
-    const cx = Array.from({ length: 160 }, (_, i) => x0 + i * (x1 - x0) / 159), cv = cx.map(v => Math.sqrt(Math.max(sviW(e.svi, Math.log(v / 100)), 1e-12) / e.T) * 100);
-    S('path', { d: linePath(cx, cv, x, y), class: 'ln ln-s1' }, svg);
+    const svi = v => Math.sqrt(Math.max(sviW(e.svi, Math.log(v / 100)), 1e-12) / e.T) * 100;
+    const cx = Array.from({ length: 160 }, (_, i) => x0 + i * (x1 - x0) / 159);
+    S('path', { d: linePath(cx, cx.map(svi), x, y), class: 'ln ln-s2', 'stroke-dasharray': '5 4' }, svg);
+    const sp = pts.filter(p => p[4] != null);   // spline IV at each quoted strike (older snapshots: none)
+    if (sp.length) S('path', { d: linePath(sp.map(p => p[0]), sp.map(p => p[4]), x, y), class: 'ln ln-s1' }, svg);
     S('line', { x1: x(100), x2: x(100), y1: plot.y0, y2: plot.y1, class: 'marker', 'stroke-opacity': 0.4 }, svg); txt(svg, x(100) + 4, plot.y0 + 11, 'forward', 'ann');
     const dot = S('circle', { r: 4, class: 'ring f-s1', visibility: 'hidden' }, svg);
     interact(base, hostS, pts.length, i => x(pts[i][0]), i => {
-      const p = pts[i], f = Math.sqrt(Math.max(sviW(e.svi, Math.log(p[0] / 100)), 1e-12) / e.T) * 100;
-      dot.setAttribute('cx', x(p[0])); dot.setAttribute('cy', y(f)); dot.setAttribute('visibility', 'visible');
-      return { title: `K/F ${p[0].toFixed(1)} % · strike ≈ ${num(e.F * p[0] / 100, 0)}`, rows: [{ value: p[2] != null ? `${p[2].toFixed(2)}–${p[3].toFixed(2)} %` : p[1].toFixed(2) + ' %', label: 'bid–ask IV', color: col('--ref') }, { value: f.toFixed(2) + ' %', label: 'SVI fit', color: col('--s1') }], y: y(f) };
+      const p = pts[i], f = svi(p[0]), g = p[4] ?? f;
+      dot.setAttribute('cx', x(p[0])); dot.setAttribute('cy', y(g)); dot.setAttribute('visibility', 'visible');
+      return { title: `K/F ${p[0].toFixed(1)} % · strike ≈ ${num(e.F * p[0] / 100, 0)}`, rows: [{ value: p[2] != null ? `${p[2].toFixed(2)}–${p[3].toFixed(2)} %` : p[1].toFixed(2) + ' %', label: 'bid–ask IV', color: col('--ref') }, ...(p[4] != null ? [{ value: p[4].toFixed(2) + ' %', label: 'spline', color: col('--s1') }] : []), { value: f.toFixed(2) + ' %', label: 'SVI fit', color: col('--s2') }], y: y(g) };
     }, { onClear: () => dot.setAttribute('visibility', 'hidden') });
     $('lvSmileSub').textContent = `${C.ix} · ${fmtExp(cur)} · ${s.days} days · forward ${num(e.F)} · ${e.n} OTM strikes`;
     $('lvSmileRead').innerHTML = '';
     const b = document.createElement('b'); b.textContent = 'Fit: ';
-    $('lvSmileRead').append(b, `RMSE ${(e.fit_rmse * 100).toFixed(2)} vol pts; ${Math.round(e.fit_inside * 100)} % of strikes priced inside the bid–ask IV. Tight 0DTE-style spreads make “inside” a demanding test — a five-parameter SVI cannot thread every quote.`);
-    fillTable(figS, ['K/F', 'Bid IV', 'Mid IV', 'Ask IV', 'SVI'], pts.map(p => [p[0].toFixed(1) + ' %', p[2] != null ? p[2].toFixed(2) : '–', p[1].toFixed(2), p[3] != null ? p[3].toFixed(2) : '–', (Math.sqrt(Math.max(sviW(e.svi, Math.log(p[0] / 100)), 1e-12) / e.T) * 100).toFixed(2)]));
+    const spTxt = e.spline_inside != null ? `spline ${Math.round(e.spline_inside * 100)} % of strikes inside the bid–ask IV${e.spline_butterfly_ok === false ? ' (butterfly flag: implied density dips below zero somewhere)' : ''}; ` : '';
+    $('lvSmileRead').append(b, `${spTxt}SVI ${Math.round(e.fit_inside * 100)} % (RMSE ${(e.fit_rmse * 100).toFixed(2)} vol pts). ${C.ix} quotes are often only a few hundredths of a vol point wide; five SVI parameters miss them by a smooth, systematic wave. The spline is the smoothest curve that stays within about a quarter spread of the mids; SVI remains the model behind the surface, the gamma profile and the calendar check.`);
+    fillTable(figS, ['K/F', 'Bid IV', 'Mid IV', 'Ask IV', 'Spline', 'SVI'], pts.map(p => [p[0].toFixed(1) + ' %', p[2] != null ? p[2].toFixed(2) : '–', p[1].toFixed(2), p[3] != null ? p[3].toFixed(2) : '–', p[4] != null ? p[4].toFixed(2) : '–', svi(p[0]).toFixed(2)]));
   }
   function checkTable() {
     const tb = $('lvCheck').tBodies[0]; tb.replaceChildren();

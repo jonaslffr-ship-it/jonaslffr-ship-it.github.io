@@ -133,6 +133,8 @@ def main():
             "replicated variance": abs(e["rep_var"] / (SIG ** 2 * T) - 1) < 0.02,
             "svi rmse": e["fit_rmse"] < 0.002,
             "butterfly": e["butterfly_ok"],
+            "spline inside bid-ask": (e["spline_inside"] or 0) >= 0.95,
+            "spline butterfly": e["spline_butterfly_ok"],
         }
         bad = [k for k, ok in checks.items() if not ok]
         print(f"{e['expiry']}  T={T:.4f}  F={e['F']:.2f} (th {Fth:.2f})  r={e['r']:.4f}  atm={e['atm_iv']:.4f}  "
