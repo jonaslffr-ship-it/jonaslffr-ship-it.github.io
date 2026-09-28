@@ -31,16 +31,16 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install -r pipeline/requirements.txt
-      # Tests gate the data, not the site: if they fail, or Cboe is unreachable, the site is still
-      # deployed with the last committed snapshot and shows it as stale.
+      # Tests gate the data, not the site: if they fail, Cboe is unreachable or its quotes are from the
+      # overnight session, the site is still deployed with the last deployed snapshot and shows it as stale.
       - name: Known-answer tests (synthetic Black–Scholes chain)
         id: test
         continue-on-error: true
         run: python pipeline/test_live_snapshot.py
-      - name: Restore the intraday records from the deployed site
+      - name: Restore the intraday records and the last snapshot from the deployed site
         run: |
-          for f in intraday.json bars.json; do
-            curl -sf "https://jonaslffr-ship-it.github.io/data/live/$f" -o "/tmp/$f"               && mv "/tmp/$f" "data/live/$f"               || echo "no deployed $f yet - keeping the committed one"
+          for f in intraday.json bars.json latest.json latest.js ndx.js study.js; do
+            curl -sf "https://jonaslffr-ship-it.github.io/data/live/$f?t=$(date +%s)" -o "/tmp/$f"               && mv "/tmp/$f" "data/live/$f"               || echo "no deployed $f yet - keeping the committed one"
           done
       - name: Snapshot from Cboe delayed quotes
         if: steps.test.outcome == 'success'
