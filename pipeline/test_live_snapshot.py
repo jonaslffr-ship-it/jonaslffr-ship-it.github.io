@@ -157,6 +157,15 @@ def main():
            "2026-09-29 00:40:00": True,    # Mon 20:25 ET: Tuesday's overnight session
            "2026-09-26 22:25:13": False,   # Sat: frozen Friday close
            "2026-09-26 03:00:00": False}   # Fri 22:45 ET: no Friday-night session
+    # data gate on real-data invariants: a clean chain passes; spot 0.6 % away from the options (quotes and index print
+    # from different sessions) and a 30-day vol 5 points off Cboe's are both blocked
+    g_ok, g_lines = ls.data_gate(snap)
+    shifted = synthetic_chain(); shifted["data"]["current_price"] = S * 1.006
+    g_sync, _ = ls.data_gate(ls.snapshot(shifted, quotes, None))
+    g_vix, _ = ls.data_gate(ls.snapshot(synthetic_chain(), {**quotes, "VIX": {"current_price": 25.0, "price_change": 0}}, None))
+    print("  data gate, clean chain:", *g_lines, sep="\n    ")
+    print(f"  data gate: clean -> {g_ok}, spot shifted +0.6 % -> {g_sync}, Cboe VIX 25 vs mine 20 -> {g_vix}")
+    if not g_ok or g_sync or g_vix: fails.append("data gate")
     bad = [ts for ts, want in gth.items() if ls.overnight_quotes(ts) != want]
     print(f"  overnight-quote guard: {len(gth) - len(bad)}/{len(gth)} timestamps classified correctly")
     if bad: fails.append(f"overnight_quotes misclassifies {bad}")

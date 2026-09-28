@@ -610,6 +610,25 @@ def update_bars(path: str) -> list:
     return sessions
 
 
+def data_gate(snap: dict) -> tuple[bool, list[str]]:
+    """Plausibility of the REAL data against independent references, before anything is published (the unit tests
+    only ever see synthetic chains). Forward vs spot catches quotes and index print from different sessions: at the
+    Friday close the nearest forward sat +0.03 % above spot, on Monday's overnight quotes -0.54 % (the bug of
+    2026-09-28). Smile fit guards the spline; the 30-day check is a coarse bound (my replication vs Cboe differs by
+    up to ~1.4 vol points in normal data, so it only catches gross breaks)."""
+    E, S = snap["expiries"], snap["spot"]["level"]
+    sync = E[0]["F"] / S - 1 if E else float("nan")
+    ins = [e["spline_inside"] for e in E if e.get("spline_inside") is not None and e["days"] <= 400]
+    fit = float(np.median(ins)) if ins else 0.0
+    checks = [("forward vs spot, nearest expiry", abs(sync) <= 0.0025, f"F/S - 1 = {sync * 100:+.3f} % (limit +-0.25 %)"),
+              ("smile fit", fit >= 0.8, f"median share of strikes inside the bid-ask IV (spline) = {fit * 100:.0f} % (min 80 %)")]
+    rep = next((c for c in snap["checks"]["replication_vs_cboe"] if c["days"] == 30), None)
+    if rep:
+        checks.append((f"30-day vol vs Cboe {rep['index']}", abs(rep["mine"] - rep["cboe"]) <= 2.5,
+                       f"mine {rep['mine']:.2f} vs {rep['cboe']:.2f} (limit +-2.5 vol pts)"))
+    return all(ok for _, ok, _ in checks), [f"GATE {'ok  ' if ok else 'FAIL'} {snap['index']} {n}: {d}" for n, ok, d in checks]
+
+
 def overnight_quotes(cboe_timestamp: str) -> bool:
     """True if Cboe's delayed chain carries global-trading-hours quotes (SPX/SPXW trade 20:15-09:15 ET on trading
     nights): the options then price the overnight market while the index print (spot, valuation time) is still the
@@ -641,6 +660,11 @@ def main():
     dates = sorted(hs["SPX"])[-1260:]
     hist = {"dates": dates, **{n: [hs[n].get(d) for d in dates] for n in (*SERIES, "NDX")}}
     snap = snapshot(chain, quotes, hist)
+    ok, snap["checks"]["gate"] = data_gate(snap)
+    print(*snap["checks"]["gate"], sep="\n")
+    if not ok:
+        print("Data gate failed: nothing published, the last snapshot stays.")
+        return
     try:
         ndx_chain = json.loads(get(f"{BASE}/options/_NDX.json"))
     except Exception as e:
@@ -650,6 +674,10 @@ def main():
         try:
             ndx_snap = snapshot(ndx_chain, {k: quotes[k] for k in ("VXN",) if k in quotes}, None, ix="NDX")
             ndx_snap.pop("history", None)
+            ok_n, ndx_snap["checks"]["gate"] = data_gate(ndx_snap)
+            print(*ndx_snap["checks"]["gate"], sep="\n")
+            if not ok_n:
+                print("NDX data gate failed: ndx.js not updated."); ndx_snap = None
         except Exception as e:  # the SPX page must not fail because of the second index
             print("NDX snapshot failed:", e); ndx_snap = None
     try:
