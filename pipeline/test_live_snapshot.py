@@ -149,6 +149,17 @@ def main():
     fails += level_study_checks()
     print("term structure, calendar arbitrage, NDX configuration:")
     fails += term_checks()
+    # overnight (GTH) quotes are not snapshotted; feed timestamps in UTC, data 15 min older (EDT: ET = UTC - 4)
+    gth = {"2026-09-28 09:27:10": True,    # Mon 05:12 ET: Sunday-night session
+           "2026-09-28 13:40:00": True,    # Mon 09:25 ET: before the open
+           "2026-09-28 13:50:00": False,   # Mon 09:35 ET: regular session
+           "2026-09-28 22:00:00": False,   # Mon 17:45 ET: after the curb, quotes frozen
+           "2026-09-29 00:40:00": True,    # Mon 20:25 ET: Tuesday's overnight session
+           "2026-09-26 22:25:13": False,   # Sat: frozen Friday close
+           "2026-09-26 03:00:00": False}   # Fri 22:45 ET: no Friday-night session
+    bad = [ts for ts, want in gth.items() if ls.overnight_quotes(ts) != want]
+    print(f"  overnight-quote guard: {len(gth) - len(bad)}/{len(gth)} timestamps classified correctly")
+    if bad: fails.append(f"overnight_quotes misclassifies {bad}")
     if fails:
         print("FAILED:", fails); sys.exit(1)
     print("all live-snapshot checks passed")

@@ -365,7 +365,8 @@ def snapshot(chain: dict, quotes: dict, hist: dict | None, ix: str = "SPX") -> d
             iv_sp = np.sqrt(np.maximum(sp(k), 1e-12) / T)
             kq = np.linspace(k.min(), k.max(), 400); wq = sp(kq)
             sp_bfly_ok = bool(np.all(wq > 0) and np.all(durrleman_g(kq, wq, sp(kq, 1), sp(kq, 2)) >= -1e-9))
-        atm_iv = float(math.sqrt(max(svi_w(p, 0.0), 1e-12) / T))
+        # ATM vol from the spline (SVI misses the at-the-money quotes by more than half a spread in about half the expiries)
+        atm_iv = float(math.sqrt(max(float(sp(0.0)) if sp is not None and k.min() < 0 < k.max() else svi_w(p, 0.0), 1e-12) / T))
 
         # model-free implied variance (Cboe VIX methodology, zero-bid truncation)
         K0 = Ks[Ks <= F].max() if np.any(Ks <= F) else Ks.min()
@@ -609,12 +610,26 @@ def update_bars(path: str) -> list:
     return sessions
 
 
+def overnight_quotes(cboe_timestamp: str) -> bool:
+    """True if Cboe's delayed chain carries global-trading-hours quotes (SPX/SPXW trade 20:15-09:15 ET on trading
+    nights): the options then price the overnight market while the index print (spot, valuation time) is still the
+    prior close, so every implied vol would use the wrong time to expiry (a Monday expiry seen at 05:30 ET with
+    Friday's clock: 6 % instead of about 16 %). cboe_timestamp is the feed's generation time in UTC; the data are
+    about 15 minutes older."""
+    q = (dt.datetime.fromisoformat(cboe_timestamp).replace(tzinfo=dt.timezone.utc) - dt.timedelta(minutes=15)).astimezone(NY)
+    wd, t = q.weekday(), q.time()   # ponytail: exchange holidays not modelled (a holiday-eve night counts as GTH: one skipped run)
+    return (wd < 5 and t < dt.time(9, 30)) or (wd in (6, 0, 1, 2, 3) and t >= dt.time(20, 15))
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default=os.path.join(os.path.dirname(__file__), "..", "data", "live"))
     ap.add_argument("--chain", help="use a cached chain JSON instead of downloading (testing)")
     a = ap.parse_args()
     chain = json.load(open(a.chain, encoding="utf-8")) if a.chain else json.loads(get(f"{BASE}/options/_SPX.json"))
+    if overnight_quotes(chain["timestamp"]):
+        print(f"Cboe feed of {chain['timestamp']} UTC carries overnight (GTH) option quotes against the prior close: no snapshot, the last one stays.")
+        return
     quotes = {s.strip("_"): quote(s) for s in ("_VIX1D", "_VIX9D", "_VIX", "_VIX3M", "_VVIX", "_VXN", "_NDX")}
     # five years of daily closes, aligned on S&P 500 trading days (VIX1D exists only since 2022)
     hs = {n: dict(history(n, days=1400)) for n in SERIES}
