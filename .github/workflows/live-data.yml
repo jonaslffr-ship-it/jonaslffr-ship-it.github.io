@@ -68,7 +68,10 @@ jobs:
             git add data/live/history
             days=$(git diff --cached --name-only | xargs -n1 basename | sed 's/\.json$//' | tr '\n' ' ')
             git commit -m "data: end-of-day volatility summary $days"
-            for i in 1 2 3; do git pull --rebase -q && git push -q && break; sleep 5; done
+            # --autostash: the snapshot leaves data/live/*.json modified; without it the rebase refused every evening
+            # and no end-of-day file reached the repo after 2026-09-25 (bug found 2026-10-03)
+            for i in 1 2 3; do git pull --rebase --autostash -q && git push -q && break; sleep 5; done
+            git status -sb | head -1 | grep -q ahead && echo "::warning::end-of-day archive was not pushed" || true
           fi
       - uses: actions/configure-pages@v6
       - uses: actions/upload-pages-artifact@v5
